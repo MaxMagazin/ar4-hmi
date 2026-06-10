@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ############################################################################
-## Version AR4 6.3.1 #########################################################
+## Version AR4 6.8 CA LC – June 2026 with manual updates from Maxim ########
 ############################################################################
 """ AR4 - robot control software
     Copyright (c) 2024, Chris Annin
@@ -67,7 +67,12 @@
   VERSION 6.2 9/12/25 changed bootstrap theme, xbox upgrade
   VERSION 6.2.1 9/24/25 fixed slider position update
   VERSION 6.3 10/8/25 changed COM entry to dropdown, added beta Linux support, added basic config module
-  VERSIOM 6.3.1 11/4/25 linux camera fixes
+  VERSION 6.4 1/3/26 MK4 update, fixed tool jog, re-added 2 step calibration, add servo amp test
+  VERSION 6.4.1 1/24/26 added path resolve for sys.executable
+  VERSION 6.5 2/15/26 - gcode bug fix / update program flow with run once and run program loop
+  VERSION 6.6 2/22/26 - update kinematic solver to reduce J4/6 wrap | reimplement wrist N/F config
+  VERSION 6.7 3/11/26 - fix MB read hold reg bug
+  VERSION 6.8 4/14/26 - MK5 update - hall effect cal high low, bug fix tool jogging, bug fix estop during calibration
 '''
 ##########################################################################
 
@@ -191,13 +196,20 @@ if CE['Platform']['IS_WINDOWS']:
 
 robot.robot_set()
 
-DIR = pathlib.Path(__file__).parent.resolve()
-os.chdir(DIR)
+#DIR = pathlib.Path(__file__).parent.resolve()
+#os.chdir(DIR)
+
+if getattr(sys, "frozen", False):
+    DIR = pathlib.Path(sys.executable).resolve().parent   # folder containing the .exe
+else:
+    DIR = pathlib.Path(__file__).resolve().parent         # folder containing AR4.py
+
+os.chdir(DIR)    
 
 RUN['cropping'] = False
 
 root = Tk()
-root.wm_title("AR4 Software Ver 6.3.1")
+root.wm_title("AR4 Software Ver 6.8")
 root.iconphoto(True, tk.PhotoImage(file="AR.png"))
 
 # Make headless RPi fit app on screen better
@@ -243,10 +255,10 @@ tab1 = ttk_bootstrap.Frame(nb)
 nb.add(tab1, text=' Main Controls ')
 
 tab2 = ttk_bootstrap.Frame(nb)
-nb.add(tab2, text='  Config Settings  ')
+nb.add(tab2, text='  System Setup  ')
 
 tab3 = ttk_bootstrap.Frame(nb)
-nb.add(tab3, text='   Kinematics    ')
+nb.add(tab3, text='   Robot Parameters    ')
 
 tab4 = ttk_bootstrap.Frame(nb)
 nb.add(tab4, text=' Inputs Outputs ')
@@ -277,121 +289,7 @@ root.wm_protocol("WM_DELETE_WINDOW", on_closing)
 root.runTrue = 0
 root.GCrunTrue = 0
 
-#global JogStepsStat
-#JogStepsStat = IntVar()
-#RUN['JogStepsStat'] = IntVar()
-#global J1OpenLoopStat
-#J1OpenLoopStat = IntVar()
-#global J2OpenLoopStat
-#J2OpenLoopStat = IntVar()
-#global J3OpenLoopStat
-#J3OpenLoopStat = IntVar()
-#global J4OpenLoopStat
-#J4OpenLoopStat = IntVar()
-#global J5OpenLoopStat
-#J5OpenLoopStat = IntVar()
-#global J6OpenLoopStat
-#J6OpenLoopStat = IntVar()
-#global DisableWristRot
-#DisableWristRot = IntVar()
-#global J1CalStat
-#J1CalStat = IntVar()
-#global J2CalStat
-#J2CalStat = IntVar()
-#global J3CalStat
-#J3CalStat = IntVar()
-#global J4CalStat
-#J4CalStat = IntVar()
-#global J5CalStat
-#J5CalStat = IntVar()
-#global J6CalStat
-#J6CalStat = IntVar()
-#global J7CalStat
-#J7CalStat = IntVar()
-#global J8CalStat
-#J8CalStat = IntVar()
-#global J9CalStat
-#J9CalStat = IntVar()
-#global J1CalStat2
-#J1CalStat2 = IntVar()
-#global J2CalStat2
-#J2CalStat2 = IntVar()
-#global J3CalStat2
-#J3CalStat2 = IntVar()
-#global J4CalStat2
-#J4CalStat2 = IntVar()
-#global J5CalStat2
-#J5CalStat2 = IntVar()
-#global J6CalStat2
-#J6CalStat2 = IntVar()
-#global J7CalStat2
-#J7CalStat2 = IntVar()
-#global J8CalStat2
-#J8CalStat2 = IntVar()
-#global J9CalStat2
-#J9CalStat2 = IntVar()
-#global IncJogStat
-#IncJogStat = IntVar()
-#global fullRot
-#fullRot = IntVar()
-#global pick180
-#pick180 = IntVar()
-#global pickClosest
-#pickClosest = IntVar()
-#global autoBG
-#autoBG = IntVar()
-#global estopActive
-#estopActive = False
-#global posOutreach
-#posOutreach = False
-#global SplineTrue
-#SplineTrue = False
-#global gcodeSpeed
-#gcodeSpeed = "10"
-#global inchTrue
-#inchTrue = False
-#global moveInProc
-#moveInProc = 0
-#global liveJog
-#liveJog = False
-#global progRunning
-#progRunning = False
-#offlineMode = False
-#global setColor
-#global renderer
-#color_map = {}
-#J1StepM = None
-#J2StepM = None
-#J3StepM = None
-#J4StepM = None
-#J5StepM = None
-#J6StepM = None
-#oriImage = None
-#DHparams = None
-#StepMonitors = [0] * 6
-#rndSpeed = 0
-#minSpeedDelay = 200  # µs
-#speedViolation = "0"
-#mainMode = 1
-# Robot constants and placeholders (you should replace these with actual values)
-#ROBOT_nDOFs = 6
-#SolutionMatrix = np.zeros((6, 2))
-#joints_estimate = np.zeros(6)
-###
-#xyzuvw_In = np.zeros(6)
-#KinematicError = 0
-# Tool and base frame placeholders (4x4 matrices)
-#Robot_BaseFrame = np.eye(4)
-#Robot_ToolFrame = np.eye(4)
-#Robot_Data = np.zeros(66)  # Replace with actual DK values
 
-#cam_on = False
-#cap = None
-
-# global RUN['xboxUse']
-# global curTheme
-
-# Vision Find variables (full implementation on Tab 6)
 RUN['selectedTemplate'] = StringVar()
 RUN['selectedTemplate'].set("")
 
@@ -427,7 +325,7 @@ RUN['IncJogStat'] = IntVar()
 RUN['fullRot'] = IntVar()
 RUN['pick180'] = IntVar()
 RUN['pickClosest'] = IntVar()
-RUN['autoBG'] = tk.IntVar(value=0)
+RUN['autoBG'] = IntVar()
 RUN['estopActive'] = False
 RUN['posOutreach'] = False
 RUN['gcodeSpeed'] = "10"
@@ -510,6 +408,7 @@ RUN['_smooth'] = None
 RUN['_grip_closed'] = None
 RUN['_pneu_open'] = None
 RUN['cmdType'] = None
+RUN['cmdTypeLong'] = None
 
 # Vision System
 RUN['cropping'] = False
@@ -542,6 +441,7 @@ RUN['render_window'] = None
 
 # Input Devices
 RUN['xboxUse'] = None
+RUN['selectedTemplate'] = None
 RUN['selectedCam'] = None
 
 
@@ -2157,6 +2057,8 @@ def startup():
   sendPos()
   time.sleep(.1)
   requestPos()
+  time.sleep(.1)
+  updateVisOp()
 
 
 
@@ -2340,15 +2242,15 @@ def lightTheme():
 
 def runProg():
   def threadProg():
-    # global RUN['rowinproc']
-    # global RUN['stopQueue']
-    # global RUN['splineActive']
-    #global estopActive
     RUN['estopActive'] = False
-    #global posOutreach
     RUN['posOutreach'] = False
     RUN['stopQueue'] = "0"
     RUN['splineActive'] = "0"
+
+    last = tab1.progView.index('end')
+    for row in range (0,last):
+      tab1.progView.itemconfig(row, {'fg': "#FFFFFF"})
+
     try:
       curRow = tab1.progView.curselection()[0]
       if (curRow == 0):
@@ -2373,32 +2275,55 @@ def runProg():
         almStatusLab.config(text="PROGRAM RUNNING",  style="OK.TLabel")
         almStatusLab2.config(text="PROGRAM RUNNING",  style="OK.TLabel") 
       RUN['rowinproc'] = 1
-      executeRow()
-      while RUN['rowinproc'] == 1:
+      try:
+        selRow = tab1.progView.curselection()[0] 
+      except:
+        if(tab1.lastProg == ""):
+          selRow = 1
+          progLoop = ("## START PROGRAM LOOP ##\r\n").encode('utf-8')
+          try:
+            index = tab1.progView.get(0, "end").index(progLoop)
+            tab1.progView.selection_clear(0, END)
+            tab1.progView.select_set(index)
+          except:
+            stopProg() 
+        else:
+          lastRow = tab1.lastRow + 1
+          lastProg = tab1.lastProg
+          ProgEntryField.delete(0, 'end')
+          ProgEntryField.insert(0,lastProg)
+          callProg(lastProg)
+          time.sleep(.4) 
+          tab1.progView.selection_clear(0, END)
+          tab1.progView.select_set(lastRow) 
+          curRowEntryField.delete(0, 'end')
+          curRowEntryField.insert(0,lastRow)
+          tab1.lastProg = ""
+      if(tab1.runTrue == 1):
+        executeRow()
+      
+        while RUN['rowinproc'] == 1:
+          time.sleep(.1)
+        #last = tab1.progView.index('end')
+        #for row in range (0,selRow):
+          #tab1.progView.itemconfig(row, {'fg': 'dodger blue'})
+        #tab1.progView.itemconfig(selRow, {'fg': 'blue2'})
+        #for row in range (selRow+1,last):
+          #tab1.progView.itemconfig(row, {'fg': 'black'})
+        
+        try:
+          selRow = tab1.progView.curselection()[0]
+          selRow += 1
+          tab1.progView.selection_clear(0, END)
+          tab1.progView.select_set(selRow)
+          curRowEntryField.delete(0, 'end')
+          curRowEntryField.insert(0,selRow)
+        except:
+          curRow=1
+          tab1.progView.selection_clear(0, END)
+          tab1.progView.select_set(curRow)
         time.sleep(.1)
-      selRow = tab1.progView.curselection()[0]
-      last = tab1.progView.index('end')
-      #for row in range (0,selRow):
-        #tab1.progView.itemconfig(row, {'fg': 'dodger blue'})
-      #tab1.progView.itemconfig(selRow, {'fg': 'blue2'})
-      #for row in range (selRow+1,last):
-        #tab1.progView.itemconfig(row, {'fg': 'black'})
-      tab1.progView.selection_clear(0, END)
-      try:
-        selRow += 1
-        tab1.progView.select_set(selRow)
-        curRow += 1
-      except:
-        pass
-      time.sleep(.1)
-      try:
-        selRow = tab1.progView.curselection()[0]
-        curRowEntryField.delete(0, 'end')
-        curRowEntryField.insert(0,selRow)
-      except:
-        curRowEntryField.delete(0, 'end')
-        curRowEntryField.insert(0,"---") 
-        tab1.runTrue = 0
+
         if (RUN['estopActive']):
           almStatusLab.config(text="Estop Button was Pressed",  style="Alarm.TLabel")
           almStatusLab2.config(text="Estop Button was Pressed",  style="Alarm.TLabel")
@@ -2413,48 +2338,78 @@ def runProg():
   
 def stepFwd():
     def threadProg():
-      #global estopActive
       RUN['estopActive'] = False
-      #global posOutreach
       RUN['posOutreach'] = False
       almStatusLab.config(text="SYSTEM READY",  style="OK.TLabel")
       almStatusLab2.config(text="SYSTEM READY",  style="OK.TLabel") 
-      executeRow() 
-      selRow = tab1.progView.curselection()[0]
-      last = tab1.progView.index('end')
-      for row in range (0,selRow):
-        tab1.progView.itemconfig(row, {'fg': 'dodger blue'})
-      tab1.progView.itemconfig(selRow, {'fg': 'blue2'})
-      for row in range (selRow+1,last):
-        tab1.progView.itemconfig(row, {'fg': 'gray'})
-      tab1.progView.selection_clear(0, END)
-      selRow += 1
-      tab1.progView.select_set(selRow)
       try:
         selRow = tab1.progView.curselection()[0]
-        curRowEntryField.delete(0, 'end')
-        curRowEntryField.insert(0,selRow)
       except:
-        curRowEntryField.delete(0, 'end')
-        curRowEntryField.insert(0,"---")
+        if(tab1.lastProg == ""):
+          selRow = 1
+          progLoop = ("## START PROGRAM LOOP ##\r\n").encode('utf-8')
+          try:
+            index = tab1.progView.get(0, "end").index(progLoop)
+            tab1.progView.selection_clear(0, END)
+            tab1.progView.select_set(index)
+          except:
+            stopProg()  
+        else:
+          lastRow = tab1.lastRow + 1
+          lastProg = tab1.lastProg
+          ProgEntryField.delete(0, 'end')
+          ProgEntryField.insert(0,lastProg)
+          callProg(lastProg)
+          time.sleep(.4) 
+          tab1.progView.selection_clear(0, END)
+          tab1.progView.select_set(lastRow) 
+          curRowEntryField.delete(0, 'end')
+          curRowEntryField.insert(0,lastRow)
+          tab1.lastProg = ""
+      executeRow() 
+      try:
+        last = tab1.progView.index('end')
+        selRow = tab1.progView.curselection()[0]
+        for row in range (0,selRow):
+          tab1.progView.itemconfig(row, {'fg': "#1E90FF"})
+        tab1.progView.itemconfig(selRow, {'fg': "#0561BD"})
+        for row in range (selRow+1,last):
+          tab1.progView.itemconfig(row, {'fg': "#9E9E9E"})
+        try:
+          selRow = tab1.progView.curselection()[0]
+          selRow += 1
+          tab1.progView.selection_clear(0, END)
+          tab1.progView.select_set(selRow)
+          curRowEntryField.delete(0, 'end')
+          curRowEntryField.insert(0,selRow)
+        except:
+          curRow=1
+          tab1.progView.selection_clear(0, END)
+          tab1.progView.select_set(curRow)
+        time.sleep(.1)
+      except Exception:
+        pass  
     t = threading.Thread(target=threadProg)
     t.start()
 
 def stepRev():
-    #global estopActive
     RUN['estopActive'] = False
-    #global posOutreach
     RUN['posOutreach'] = False
     almStatusLab.config(text="SYSTEM READY",  style="OK.TLabel")
     almStatusLab2.config(text="SYSTEM READY",  style="OK.TLabel") 
+    try:
+      selRow = tab1.progView.curselection()[0]
+    except:
+      selRow = 1
+      tab1.progView.selection_clear(0, END)
+      tab1.progView.select_set(selRow) 
     executeRow()  
-    selRow = tab1.progView.curselection()[0]
     last = tab1.progView.index('end')
     for row in range (0,selRow):
-      tab1.progView.itemconfig(row, {'fg': 'gray'})
-    tab1.progView.itemconfig(selRow, {'fg': 'red'})
+      tab1.progView.itemconfig(row, {'fg': "#9E9E9E"})
+    tab1.progView.itemconfig(selRow, {'fg': "#FF0000"})
     for row in range (selRow+1,last):
-      tab1.progView.itemconfig(row, {'fg': 'tomato2'})
+      tab1.progView.itemconfig(row, {'fg': "#EE5C42"})
     tab1.progView.selection_clear(0, END)
     selRow -= 1
     tab1.progView.select_set(selRow)
@@ -2467,12 +2422,18 @@ def stepRev():
       curRowEntryField.insert(0,"---")  
     
 def stopProg():
-  # global RUN['cmdType']
-  # global RUN['splineActive']
-  #global estopActive
-  #global posOutreach
-  # global RUN['stopQueue']
-  lastProg = ""
+  try:
+    command = "STOP\n"
+    #cmdSentEntryField.delete(0, 'end')
+    #cmdSentEntryField.insert(0,command)
+    RUN['ser2'].write(command.encode())
+    RUN['ser2'].flushInput()
+    time.sleep(.1)
+    response = str(RUN['ser2'].readline().strip(),'utf-8')
+    #cmdRecEntryField.delete(0, 'end')
+    #cmdRecEntryField.insert(0,response)
+  except:
+    print("Error IO Board Not Connected")
   tab1.runTrue = 0
   if (RUN['estopActive']):
     almStatusLab.config(text="Estop Button was Pressed",  style="Alarm.TLabel")
@@ -2487,22 +2448,22 @@ def stopProg():
   
   
 def executeRow():
-  # global RUN['rowinproc']
-  # global RUN['LineDist']
-  # global RUN['Xv']
-  # global RUN['Yv']
-  # global RUN['Zv']
-  #global progRunning, offlineMode
-  # global RUN['VR_angles'], RUN['stopQueue'], RUN['splineActive']
-  #global moveInProc
   RUN['progRunning'] = True
-  selRow = tab1.progView.curselection()[0]
-  tab1.progView.see(selRow+2)
-  data = list(map(int, tab1.progView.curselection()))
-  command=tab1.progView.get(data[0]).decode().strip()
-  RUN['cmdType'] =command[:6]
-  cmdTypeLong=command[:11]
-  
+  try:
+    selRow = tab1.progView.curselection()[0]
+    tab1.progView.see(selRow+2)
+  except Exception:
+    pass
+
+  try: 
+    data = list(map(int, tab1.progView.curselection()))
+    command=tab1.progView.get(data[0]).decode().strip()
+    RUN['cmdType'] =command[:6]
+    RUN['cmdTypeLong']=command[:11]
+  except:
+    RUN['cmdType'] = "Stop P"
+    RUN['cmdTypeLong'] = "Stop P"
+
   ##Call Program##
   if (RUN['cmdType'] == "Call P"):
     if (RUN['moveInProc'] == 1):
@@ -2510,14 +2471,16 @@ def executeRow():
     tab1.lastRow = tab1.progView.curselection()[0]
     tab1.lastProg = ProgEntryField.get()
     programIndex = command.find("Program -")
-    progNum = str(command[programIndex+10:])
+    progName = str(command[programIndex+10:])
     ProgEntryField.delete(0, 'end')
-    ProgEntryField.insert(0,progNum)
-    callProg(progNum)
+    ProgEntryField.insert(0,progName)
+    callProg(progName)
     time.sleep(.4) 
     index = 0
     tab1.progView.selection_clear(0, END)
-    tab1.progView.select_set(index) 
+    tab1.progView.select_set(index)
+    
+
 
   ##Run Gcode Program##
   if (RUN['cmdType'] == "Run Gc"):
@@ -2538,19 +2501,12 @@ def executeRow():
     tab1.progView.selection_clear(0, END)
     tab1.progView.select_set(index) 
 
-  ##Return Program##
-  if (RUN['cmdType'] == "Return"):
+  ##Stop Program##
+  if (RUN['cmdType'] == "Stop P"):
     if (RUN['moveInProc'] == 1):
       RUN['moveInProc'] = 2
-    lastRow = tab1.lastRow
-    lastProg = tab1.lastProg
-    ProgEntryField.delete(0, 'end')
-    ProgEntryField.insert(0,lastProg)
-    callProg(lastProg)
-    time.sleep(.4) 
-    index = 0
-    tab1.progView.selection_clear(0, END)
-    tab1.progView.select_set(lastRow) 
+    stopProg()
+
 
   ##Test Limit Switches
   if (RUN['cmdType'] == "Test L"):
@@ -2566,6 +2522,23 @@ def executeRow():
     RUN['ser'].flushInput()
     time.sleep(.05)
     response = str(RUN['ser'].readline().strip(),'utf-8')
+    manEntryField.delete(0, 'end')
+    manEntryField.insert(0,response)
+
+  ##Test Gripper Amperage
+  if (RUN['cmdType'] == "Test G"):
+    if RUN['offlineMode']:
+      almStatusLab.config(text="Test limit switches not supported in offline programming mode", style="Alarm.TLabel")
+      return
+    if (RUN['moveInProc'] == 1):
+      RUN['moveInProc'] = 2
+    command = "TG\n" 
+    cmdSentEntryField.delete(0, 'end')
+    cmdSentEntryField.insert(0,command)
+    RUN['ser2'].write(command.encode())
+    RUN['ser2'].flushInput()
+    time.sleep(.05)
+    response = str(RUN['ser2'].readline().strip(),'utf-8')
     manEntryField.delete(0, 'end')
     manEntryField.insert(0,response)
 
@@ -2879,7 +2852,7 @@ def executeRow():
     action = str(command[actionIndex+2:actionIndex+6])
     slaveID = str(command[slavestartIndex+9:regNumstartIndex-2])
     opVal = str(command[regNumstartIndex+11:inputIndex-8])
-    subcommand = "BD"+"A"+slaveID+"B"+inputNum+"C"+opVal+"\n"
+    subcommand = "BH"+"A"+slaveID+"B"+inputNum+"C"+opVal+"\n"
     RUN['ser'].write(subcommand.encode())
     RUN['ser'].flushInput()
     time.sleep(.1) 
@@ -2955,7 +2928,7 @@ def executeRow():
         stopProg()
 
   ##Wait 5v IO board##
-  if (cmdTypeLong == "Wait 5v Inp"):
+  if (RUN['cmdTypeLong'] == "Wait 5v Inp"):
     if RUN['offlineMode']:
       almStatusLab.config(text="IO not supported in offline programming mode", style="Alarm.TLabel")
       return
@@ -2977,7 +2950,7 @@ def executeRow():
  
 
   ##Wait Modbus Coil##
-  if (cmdTypeLong == "Wait MBcoil"):
+  if (RUN['cmdTypeLong'] == "Wait MBcoil"):
     if RUN['offlineMode']:
       almStatusLab.config(text="IO not supported in offline programming mode", style="Alarm.TLabel")
       return
@@ -3000,7 +2973,7 @@ def executeRow():
     RUN['ser'].read()
 
   ##Wait Modbus Input##
-  if (cmdTypeLong == "Wait MBinpu"):
+  if (RUN['cmdTypeLong'] == "Wait MBinpu"):
     if RUN['offlineMode']:
       almStatusLab.config(text="IO not supported in offline programming mode", style="Alarm.TLabel")
       return
@@ -3024,7 +2997,7 @@ def executeRow():
    
               
 
-### this will fail on first run without reloading program - the insertion inserts it as bytes (due to pickling the program save) but when reloaded its a listbox of strings - therefore this would only work after reload and looking for string
+  ### this will fail on first run without reloading program - the insertion inserts it as bytes (due to pickling the program save) but when reloaded its a listbox of strings - therefore this would only work after reload and looking for string
   ## long term fix refactor all 
   ''' 
   ##Jump to Row##
@@ -3085,12 +3058,8 @@ def executeRow():
 
 
 
-
-
-
-
   ##Set Output 5v IO Board##
-  if (cmdTypeLong == "Set 5v Outp"):
+  if (RUN['cmdTypeLong'] == "Set 5v Outp"):
     if RUN['offlineMode']:
       almStatusLab.config(text="IO not supported in offline programming mode", style="Alarm.TLabel")
       return
@@ -3112,7 +3081,7 @@ def executeRow():
     RUN['ser2'].read()
 
   ##Set Modbus Coil##
-  if (cmdTypeLong == "Set MBcoil "):
+  if (RUN['cmdTypeLong'] == "Set MBcoil "):
     if RUN['offlineMode']:
       almStatusLab.config(text="IO not supported in offline programming mode", style="Alarm.TLabel")
       return
@@ -3135,7 +3104,7 @@ def executeRow():
       ErrorHandler("Modbus Error")
 
   ##Set Modbus Register##
-  if (cmdTypeLong == "Set MBoutpu"):
+  if (RUN['cmdTypeLong'] == "Set MBoutpu"):
     if RUN['offlineMode']:
       almStatusLab.config(text="IO not supported in offline programming mode", style="Alarm.TLabel")
       return
@@ -3415,10 +3384,6 @@ def executeRow():
 
 
 
-
-
-
-
  ##Offs J Command##  
   if (RUN['cmdType'] == "OFF J "): 
     if (RUN['moveInProc'] == 0):
@@ -3684,8 +3649,8 @@ def executeRow():
     RUN['yVal'] = command[yIndex+3:zIndex]
     RUN['zVal'] = command[zIndex+3:rzIndex]
     rzVal = command[rzIndex+4:ryIndex]
-    if (np.sign(float(rzVal)) != np.sign(float(CAL['RzcurPos']))):
-      rzVal=str(float(rzVal)*-1)
+    #if (np.sign(float(rzVal)) != np.sign(float(CAL['RzcurPos']))):
+    #  rzVal=str(float(rzVal)*-1)
     ryVal = command[ryIndex+4:rxIndex]
     rxVal = command[rxIndex+4:J7Index]
     J7Val = command[J7Index+4:J8Index]
@@ -3823,11 +3788,11 @@ def executeRow():
       curRow = tab1.progView.curselection()[0]
       selRow = tab1.progView.curselection()[0]
       last = tab1.progView.index('end')
-      for row in range (0,selRow):
-        tab1.progView.itemconfig(row, {'fg': 'dodger blue'})
-      tab1.progView.itemconfig(selRow, {'fg': 'blue2'})
-      for row in range (selRow+1,last):
-        tab1.progView.itemconfig(row, {'fg': 'black'})
+      #for row in range (0,selRow):
+      #  tab1.progView.itemconfig(row, {'fg': "#1E90FF"})
+      #tab1.progView.itemconfig(selRow, {'fg': "#116AC4"})
+      #for row in range (selRow+1,last):
+      #  tab1.progView.itemconfig(row, {'fg': "#050505"})
       tab1.progView.selection_clear(0, END)
       selRow += 1
       tab1.progView.select_set(selRow)
@@ -3928,10 +3893,10 @@ def executeRow():
       selRow = tab1.progView.curselection()[0]
       last = tab1.progView.index('end')
       for row in range (0,selRow):
-        tab1.progView.itemconfig(row, {'fg': 'dodger blue'})
-      tab1.progView.itemconfig(selRow, {'fg': 'blue2'})
+        tab1.progView.itemconfig(row, {'fg': "#1E90FF"})
+      tab1.progView.itemconfig(selRow, {'fg': "#0057A6"})
       for row in range (selRow+1,last):
-        tab1.progView.itemconfig(row, {'fg': 'black'})
+        tab1.progView.itemconfig(row, {'fg': "#000000"})
       tab1.progView.selection_clear(0, END)
       selRow += 1
       tab1.progView.select_set(selRow)
@@ -3951,10 +3916,10 @@ def executeRow():
       selRow = tab1.progView.curselection()[0]
       last = tab1.progView.index('end')
       for row in range (0,selRow):
-        tab1.progView.itemconfig(row, {'fg': 'dodger blue'})
-      tab1.progView.itemconfig(selRow, {'fg': 'blue2'})
+        tab1.progView.itemconfig(row, {'fg': "#1E90FF"})
+      tab1.progView.itemconfig(selRow, {'fg': "#0057A6"})
       for row in range (selRow+1,last):
-        tab1.progView.itemconfig(row, {'fg': 'black'})
+        tab1.progView.itemconfig(row, {'fg': "#000000"})
       tab1.progView.selection_clear(0, END)
       selRow += 1
       tab1.progView.select_set(selRow)
@@ -4069,6 +4034,7 @@ def executeRow():
       index = tab1.progView.get(0, "end").index(tabNum)
       tab1.progView.selection_clear(0, END)
       tab1.progView.select_set(index) 
+  
 
 
   RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
@@ -5524,7 +5490,8 @@ def LiveJointJog(value):
   #!! WC isn't defined prior to use here, at least sometimes
   RUN['WC'] = locals().get("RUN['WC']", "")
   ############
-  command = "LJ"+"V"+str(value)+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+  #command = "LJ"+"V"+str(value)+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+  command = "LJ"+"V"+str(value)+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"WA"+"Lm"+LoopMode+"\n"
   start_live_joint_jog_thread(command)
   if not RUN['offlineMode']:
     cmdSentEntryField.delete(0, 'end')
@@ -5568,7 +5535,8 @@ def LiveCarJog(value):
   DECspd = DECspeedField.get()
   ACCramp = ACCrampField.get()
   LoopMode = str(CAL['J1OpenLoopVal'].get())+str(CAL['J2OpenLoopVal'].get())+str(CAL['J3OpenLoopVal'].get())+str(CAL['J4OpenLoopVal'].get())+str(CAL['J5OpenLoopVal'].get())+str(CAL['J6OpenLoopVal'].get())
-  command = "LC"+"V"+str(value)+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+  #command = "LC"+"V"+str(value)+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+  command = "LC"+"V"+str(value)+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"WA"+"Lm"+LoopMode+"\n"
   start_live_cartesian_jog_thread(command)
   if not RUN['offlineMode']:
     cmdSentEntryField.delete(0, 'end')
@@ -5613,7 +5581,8 @@ def LiveToolJog(value):
   DECspd = DECspeedField.get()
   ACCramp = ACCrampField.get()
   LoopMode = str(CAL['J1OpenLoopVal'].get())+str(CAL['J2OpenLoopVal'].get())+str(CAL['J3OpenLoopVal'].get())+str(CAL['J4OpenLoopVal'].get())+str(CAL['J5OpenLoopVal'].get())+str(CAL['J6OpenLoopVal'].get())
-  command = "LT"+"V"+str(value)+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+  #command = "LT"+"V"+str(value)+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+  command = "LT"+"V"+str(value)+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"WA"+"Lm"+LoopMode+"\n"
   start_live_tool_jog_thread(command)
   if not RUN['offlineMode']:
     cmdSentEntryField.delete(0, 'end')
@@ -5971,7 +5940,8 @@ def XjogNeg(value):
   j9Val = str(CAL['J9PosCur'])
   LoopMode = str(CAL['J1OpenLoopVal'].get())+str(CAL['J2OpenLoopVal'].get())+str(CAL['J3OpenLoopVal'].get())+str(CAL['J4OpenLoopVal'].get())+str(CAL['J5OpenLoopVal'].get())+str(CAL['J6OpenLoopVal'].get())
   if not RUN['offlineMode']:
-    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    #command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"WA"+"Lm"+LoopMode+"\n"
     commandVR = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
     cmdSentEntryField.delete(0, 'end')
     cmdSentEntryField.insert(0, command)
@@ -6026,7 +5996,8 @@ def YjogNeg(value):
   j9Val = str(CAL['J9PosCur'])
   LoopMode = str(CAL['J1OpenLoopVal'].get())+str(CAL['J2OpenLoopVal'].get())+str(CAL['J3OpenLoopVal'].get())+str(CAL['J4OpenLoopVal'].get())+str(CAL['J5OpenLoopVal'].get())+str(CAL['J6OpenLoopVal'].get())
   if not RUN['offlineMode']:
-    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    #command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"WA"+"Lm"+LoopMode+"\n"
     commandVR = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
     cmdSentEntryField.delete(0, 'end')
     cmdSentEntryField.insert(0, command)
@@ -6081,7 +6052,8 @@ def ZjogNeg(value):
   j9Val = str(CAL['J9PosCur'])
   LoopMode = str(CAL['J1OpenLoopVal'].get())+str(CAL['J2OpenLoopVal'].get())+str(CAL['J3OpenLoopVal'].get())+str(CAL['J4OpenLoopVal'].get())+str(CAL['J5OpenLoopVal'].get())+str(CAL['J6OpenLoopVal'].get())
   if not RUN['offlineMode']:
-    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    #command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"WA"+"Lm"+LoopMode+"\n"
     commandVR = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
     cmdSentEntryField.delete(0, 'end')
     cmdSentEntryField.insert(0, command)
@@ -6132,7 +6104,8 @@ def RxjogNeg(value):
   j9Val = str(CAL['J9PosCur'])
   LoopMode = str(CAL['J1OpenLoopVal'].get())+str(CAL['J2OpenLoopVal'].get())+str(CAL['J3OpenLoopVal'].get())+str(CAL['J4OpenLoopVal'].get())+str(CAL['J5OpenLoopVal'].get())+str(CAL['J6OpenLoopVal'].get())
   if not RUN['offlineMode']:
-    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    #command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"WA"+"Lm"+LoopMode+"\n"
     commandVR = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
     cmdSentEntryField.delete(0, 'end')
     cmdSentEntryField.insert(0, command)
@@ -6184,7 +6157,8 @@ def RyjogNeg(value):
   j9Val = str(CAL['J9PosCur'])
   LoopMode = str(CAL['J1OpenLoopVal'].get())+str(CAL['J2OpenLoopVal'].get())+str(CAL['J3OpenLoopVal'].get())+str(CAL['J4OpenLoopVal'].get())+str(CAL['J5OpenLoopVal'].get())+str(CAL['J6OpenLoopVal'].get())
   if not RUN['offlineMode']:
-    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    #command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"WA"+"Lm"+LoopMode+"\n"
     commandVR = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
     cmdSentEntryField.delete(0, 'end')
     cmdSentEntryField.insert(0, command)
@@ -6235,7 +6209,8 @@ def RzjogNeg(value):
   j9Val = str(CAL['J9PosCur'])
   LoopMode = str(CAL['J1OpenLoopVal'].get())+str(CAL['J2OpenLoopVal'].get())+str(CAL['J3OpenLoopVal'].get())+str(CAL['J4OpenLoopVal'].get())+str(CAL['J5OpenLoopVal'].get())+str(CAL['J6OpenLoopVal'].get())
   if not RUN['offlineMode']:
-    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    #command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"WA"+"Lm"+LoopMode+"\n"
     commandVR = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
     cmdSentEntryField.delete(0, 'end')
     cmdSentEntryField.insert(0, command)
@@ -6286,7 +6261,8 @@ def XjogPos(value):
   j9Val = str(CAL['J9PosCur'])
   LoopMode = str(CAL['J1OpenLoopVal'].get())+str(CAL['J2OpenLoopVal'].get())+str(CAL['J3OpenLoopVal'].get())+str(CAL['J4OpenLoopVal'].get())+str(CAL['J5OpenLoopVal'].get())+str(CAL['J6OpenLoopVal'].get())
   if not RUN['offlineMode']:
-    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    #command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"WA"+"Lm"+LoopMode+"\n"
     commandVR = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
     cmdSentEntryField.delete(0, 'end')
     cmdSentEntryField.insert(0, command)
@@ -6337,7 +6313,8 @@ def YjogPos(value):
   j9Val = str(CAL['J9PosCur'])
   LoopMode = str(CAL['J1OpenLoopVal'].get())+str(CAL['J2OpenLoopVal'].get())+str(CAL['J3OpenLoopVal'].get())+str(CAL['J4OpenLoopVal'].get())+str(CAL['J5OpenLoopVal'].get())+str(CAL['J6OpenLoopVal'].get())
   if not RUN['offlineMode']:
-    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    #command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"WA"+"Lm"+LoopMode+"\n"
     commandVR = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
     cmdSentEntryField.delete(0, 'end')
     cmdSentEntryField.insert(0, command)
@@ -6389,7 +6366,8 @@ def ZjogPos(value):
   j9Val = str(CAL['J9PosCur'])
   LoopMode = str(CAL['J1OpenLoopVal'].get())+str(CAL['J2OpenLoopVal'].get())+str(CAL['J3OpenLoopVal'].get())+str(CAL['J4OpenLoopVal'].get())+str(CAL['J5OpenLoopVal'].get())+str(CAL['J6OpenLoopVal'].get())
   if not RUN['offlineMode']:
-    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    #command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"WA"+"Lm"+LoopMode+"\n"
     commandVR = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
     cmdSentEntryField.delete(0, 'end')
     cmdSentEntryField.insert(0, command)
@@ -6441,7 +6419,8 @@ def RxjogPos(value):
   j9Val = str(CAL['J9PosCur'])
   LoopMode = str(CAL['J1OpenLoopVal'].get())+str(CAL['J2OpenLoopVal'].get())+str(CAL['J3OpenLoopVal'].get())+str(CAL['J4OpenLoopVal'].get())+str(CAL['J5OpenLoopVal'].get())+str(CAL['J6OpenLoopVal'].get())
   if not RUN['offlineMode']:
-    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    #command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"WA"+"Lm"+LoopMode+"\n"
     commandVR = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
     cmdSentEntryField.delete(0, 'end')
     cmdSentEntryField.insert(0, command)
@@ -6492,7 +6471,8 @@ def RyjogPos(value):
   j9Val = str(CAL['J9PosCur'])
   LoopMode = str(CAL['J1OpenLoopVal'].get())+str(CAL['J2OpenLoopVal'].get())+str(CAL['J3OpenLoopVal'].get())+str(CAL['J4OpenLoopVal'].get())+str(CAL['J5OpenLoopVal'].get())+str(CAL['J6OpenLoopVal'].get())
   if not RUN['offlineMode']:
-    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    #command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"WA"+"Lm"+LoopMode+"\n"
     commandVR = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
     cmdSentEntryField.delete(0, 'end')
     cmdSentEntryField.insert(0, command)
@@ -6543,7 +6523,8 @@ def RzjogPos(value):
   j9Val = str(CAL['J9PosCur'])
   LoopMode = str(CAL['J1OpenLoopVal'].get())+str(CAL['J2OpenLoopVal'].get())+str(CAL['J3OpenLoopVal'].get())+str(CAL['J4OpenLoopVal'].get())+str(CAL['J5OpenLoopVal'].get())+str(CAL['J6OpenLoopVal'].get())
   if not RUN['offlineMode']:
-    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    #command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
+    command = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+j7Val+"J8"+j8Val+"J9"+j9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"WA"+"Lm"+LoopMode+"\n"
     commandVR = "MJ"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"\n"
     cmdSentEntryField.delete(0, 'end')
     cmdSentEntryField.insert(0, command)
@@ -7057,7 +7038,8 @@ def teachInsertBelSelected():
         f.write('\n')
       f.close()
   elif(movetype == "Move L"):
-    newPos = movetype + " [*] X "+CAL['XcurPos']+" Y "+CAL['YcurPos']+" Z "+CAL['ZcurPos']+" Rz "+CAL['RzcurPos']+" Ry "+CAL['RycurPos']+" Rx "+CAL['RxcurPos']+" J7 "+str(CAL['J7PosCur'])+" J8 "+str(CAL['J8PosCur'])+" J9 "+str(CAL['J9PosCur'])+" "+speedPrefix+" "+Speed+" Ac "+ACCspd+ " Dc "+DECspd+" Rm "+ACCramp+" Rnd "+Rounding+" $ "+RUN['WC'] 
+    #newPos = movetype + " [*] X "+CAL['XcurPos']+" Y "+CAL['YcurPos']+" Z "+CAL['ZcurPos']+" Rz "+CAL['RzcurPos']+" Ry "+CAL['RycurPos']+" Rx "+CAL['RxcurPos']+" J7 "+str(CAL['J7PosCur'])+" J8 "+str(CAL['J8PosCur'])+" J9 "+str(CAL['J9PosCur'])+" "+speedPrefix+" "+Speed+" Ac "+ACCspd+ " Dc "+DECspd+" Rm "+ACCramp+" Rnd "+Rounding+" $ "+RUN['WC'] 
+    newPos = movetype + " [*] X "+CAL['XcurPos']+" Y "+CAL['YcurPos']+" Z "+CAL['ZcurPos']+" Rz "+CAL['RzcurPos']+" Ry "+CAL['RycurPos']+" Rx "+CAL['RxcurPos']+" J7 "+str(CAL['J7PosCur'])+" J8 "+str(CAL['J8PosCur'])+" J9 "+str(CAL['J9PosCur'])+" "+speedPrefix+" "+Speed+" Ac "+ACCspd+ " Dc "+DECspd+" Rm "+ACCramp+" Rnd "+Rounding+" $ A" 
     tab1.progView.insert(selRow, bytes(newPos + '\n', 'utf-8')) 
     tab1.progView.selection_clear(0, END)
     tab1.progView.select_set(selRow)
@@ -7317,7 +7299,7 @@ def manInsItem():
   selRow = tab1.progView.curselection()[0]
   curRowEntryField.delete(0, 'end')
   curRowEntryField.insert(0,selRow)
-  tab1.progView.itemconfig(selRow, {'fg': 'darkgreen'})
+  tab1.progView.itemconfig(selRow, {'fg': "#8264B8"})
   items = tab1.progView.get(0,END)
   file_path = path.relpath(ProgEntryField.get())
   with open(file_path,'w', encoding='utf-8') as f:
@@ -7333,7 +7315,7 @@ def manReplItem():
   tab1.progView.insert(selRow, bytes(manEntryField.get() + '\n', 'utf-8')) 
   tab1.progView.selection_clear(0, END)
   tab1.progView.select_set(selRow)
-  tab1.progView.itemconfig(selRow, {'fg': 'darkgreen'})  
+  tab1.progView.itemconfig(selRow, {'fg': "#8264B8"})  
   items = tab1.progView.get(0,END)
   file_path = path.relpath(ProgEntryField.get())
   with open(file_path,'w', encoding='utf-8') as f:
@@ -7812,7 +7794,10 @@ def CreateProg():
   user_input = simpledialog.askstring(title="New Program", prompt="New Program Name:")
   file_path = user_input + ".ar4"
   with open(file_path,'w', encoding='utf-8') as f:
-    f.write("##BEGINNING OF PROGRAM##")
+    f.write("## RUN ONCE ##")
+    f.write('\n')
+    f.write('\n')
+    f.write("## START PROGRAM LOOP ##")
     f.write('\n')
   f.close()
   ProgEntryField.delete(0, 'end')
@@ -7874,7 +7859,7 @@ def insertGCprog():
 
     
 
-def insertReturn():  
+def insertStop():  
   try:
     selRow = tab1.progView.curselection()[0]
     selRow += 1
@@ -7882,7 +7867,7 @@ def insertReturn():
     last = tab1.progView.index('end')
     selRow = last
     tab1.progView.select_set(selRow)
-  value = "Return"           
+  value = "Stop Program"           
   tab1.progView.insert(selRow, bytes(value + '\n', 'utf-8')) 
   tab1.progView.selection_clear(0, END)
   tab1.progView.select_set(selRow)
@@ -8298,7 +8283,14 @@ def CalcLinWayPt(CX,CY,CZ,curWayPt,):
 ##############################################################################################################################################################	
 
 def calRobotAll():
-  # global RUN['VR_angles']
+  RUN['estopActive'] = False
+  message = "Auto Calibration In Process"
+  almStatusLab.config(text=message, style="OK.TLabel")
+  almStatusLab2.config(text=message, style="OK.TLabel")
+  tab1.update_idletasks()
+  tab1.update()
+  tab2.update_idletasks()
+  tab2.update() 
   success = FALSE
   if RUN['offlineMode']:
     almStatusLab.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
@@ -8314,19 +8306,27 @@ def calRobotAll():
   cmdRecEntryField.delete(0, 'end')
   cmdRecEntryField.insert(0,response)
   if (response[:1] == 'A'):
-    displayPosition(response)  
-    message = "Auto Calibration Stage 1 Successful"
-    RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
-    setStepMonitorsVR()
-    almStatusLab.config(text=message, style="OK.TLabel")
-    almStatusLab2.config(text=message, style="OK.TLabel")
-    success = TRUE
+    displayPosition(response)
+    if (not RUN['estopActive']):  
+      message = "Auto Calibration Stage 1 Successful"
+      RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
+      setStepMonitorsVR()
+      almStatusLab.config(text=message, style="OK.TLabel")
+      almStatusLab2.config(text=message, style="OK.TLabel")
+      tab1.update_idletasks()
+      tab1.update()
+      tab2.update_idletasks()
+      tab2.update()
+      success = TRUE
   else:
     message = "Auto Calibration Stage 1 Failed - See Log" 
     almStatusLab.config(text=message, style="Alarm.TLabel")
     almStatusLab2.config(text=message, style="Alarm.TLabel")
+    tab1.update_idletasks()
+    tab1.update()
+    tab2.update_idletasks()
+    tab2.update()
     ErrorHandler(response)
-
   if "success" in message.strip().lower():
     logger.info(message)
   else:
@@ -8334,7 +8334,7 @@ def calRobotAll():
   value=tab8.ElogView.get(0,END)
   pickle.dump(value,open("ErrorLog","wb")) 
   ##### STAGE 2 ########
-  if (success):
+  if (success and not RUN['estopActive']):
     CalStatVal2 = int(CAL['J1CalStatVal2'].get())+int(CAL['J2CalStatVal2'].get())+int(CAL['J3CalStatVal2'].get())+int(CAL['J4CalStatVal2'].get())+int(CAL['J5CalStatVal2'].get())+int(CAL['J6CalStatVal2'].get())
     if(CalStatVal2>0):
       command = "LL"+"A"+str(CAL['J1CalStatVal2'].get())+"B"+str(CAL['J2CalStatVal2'].get())+"C"+str(CAL['J3CalStatVal2'].get())+"D"+str(CAL['J4CalStatVal2'].get())+"E"+str(CAL['J5CalStatVal2'].get())+"F"+str(CAL['J6CalStatVal2'].get())+"G"+str(CAL['J7CalStatVal2'].get())+"H"+str(CAL['J8CalStatVal2'].get())+"I"+str(CAL['J9CalStatVal2'].get())+"J"+str(CAL['J1calOff'])+"K"+str(CAL['J2calOff'])+"L"+str(CAL['J3calOff'])+"M"+str(CAL['J4calOff'])+"N"+str(CAL['J5calOff'])+"O"+str(CAL['J6calOff'])+"P"+str(CAL['J7calOff'])+"Q"+str(CAL['J8calOff'])+"R"+str(CAL['J9calOff'])+"\n" 
@@ -8346,16 +8346,25 @@ def calRobotAll():
       cmdRecEntryField.delete(0, 'end')
       cmdRecEntryField.insert(0,response)
       if (response[:1] == 'A'):
-        displayPosition(response)  
-        message = "Auto Calibration Stage 2 Successful"
-        RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
-        setStepMonitorsVR()
-        almStatusLab.config(text=message, style="OK.TLabel")
-        almStatusLab2.config(text=message, style="OK.TLabel") 
+        displayPosition(response)
+        if (not RUN['estopActive']):   
+          message = "Auto Calibration Stage 2 Successful"
+          RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
+          setStepMonitorsVR()
+          almStatusLab.config(text=message, style="OK.TLabel")
+          almStatusLab2.config(text=message, style="OK.TLabel")
+          tab1.update_idletasks()
+          tab1.update()
+          tab2.update_idletasks()
+          tab2.update() 
       else:
         message = "Auto Calibration Stage 2 Failed - See Log" 
         almStatusLab.config(text=message, style="Alarm.TLabel")
         almStatusLab2.config(text=message, style="Alarm.TLabel")
+        tab1.update_idletasks()
+        tab1.update()
+        tab2.update_idletasks()
+        tab2.update()
         ErrorHandler(response)
       if "success" in message.strip().lower():
         logger.info(message)
@@ -8366,7 +8375,14 @@ def calRobotAll():
 
 
 def calRobotJ1():
-  # global RUN['VR_angles']
+  RUN['estopActive'] = False
+  message = "J1 Calibration In Process"
+  almStatusLab.config(text=message, style="OK.TLabel")
+  almStatusLab2.config(text=message, style="OK.TLabel")
+  tab1.update_idletasks()
+  tab1.update()
+  tab2.update_idletasks()
+  tab2.update()
   if RUN['offlineMode']:
     almStatusLab.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
     almStatusLab2.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
@@ -8381,11 +8397,12 @@ def calRobotJ1():
   cmdRecEntryField.insert(0,response)
   if (response[:1] == 'A'):
     displayPosition(response)  
-    message = "J1 Calibrated Successfully"
-    RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
-    setStepMonitorsVR()
-    almStatusLab.config(text=message, style="OK.TLabel")
-    almStatusLab2.config(text=message, style="OK.TLabel") 
+    if (not RUN['estopActive']):
+      message = "J1 Calibrated Successfully"
+      RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
+      setStepMonitorsVR()
+      almStatusLab.config(text=message, style="OK.TLabel")
+      almStatusLab2.config(text=message, style="OK.TLabel") 
   else:
     message = "J1 Calibrated Failed" 
     almStatusLab.config(text=message, style="Alarm.TLabel")
@@ -8399,7 +8416,14 @@ def calRobotJ1():
   pickle.dump(value,open("ErrorLog","wb"))     
 
 def calRobotJ2():
-  # global RUN['VR_angles']
+  RUN['estopActive'] = False
+  message = "J2 Calibration In Process"
+  almStatusLab.config(text=message, style="OK.TLabel")
+  almStatusLab2.config(text=message, style="OK.TLabel")
+  tab1.update_idletasks()
+  tab1.update()
+  tab2.update_idletasks()
+  tab2.update()
   if RUN['offlineMode']:
     almStatusLab.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
     almStatusLab2.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
@@ -8414,24 +8438,33 @@ def calRobotJ2():
   cmdRecEntryField.insert(0,response)
   if (response[:1] == 'A'):
     displayPosition(response)  
-    message = "J2 Calibrated Successfully"
-    RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
-    setStepMonitorsVR()
-    almStatusLab.config(text=message, style="OK.TLabel")
-    almStatusLab2.config(text=message, style="OK.TLabel") 
+    if (not RUN['estopActive']):
+      message = "J2 Calibrated Successfully"
+      RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
+      setStepMonitorsVR()
+      almStatusLab.config(text=message, style="OK.TLabel")
+      almStatusLab2.config(text=message, style="OK.TLabel") 
   else:
     message = "J2 Calibrated Failed" 
     almStatusLab.config(text=message, style="Alarm.TLabel")
     almStatusLab2.config(text=message, style="Alarm.TLabel")
     ErrorHandler(response)
-  #Curtime = datetime.now().strftime("%B %d %Y - %I:%M%p")
-  #tab8.ElogView.insert(END, Curtime+" - "+message)
-  logger.error(message)
+  if "success" in message.strip().lower():
+    logger.info(message)
+  else:
+    logger.error(message)
   value=tab8.ElogView.get(0,END)
-  pickle.dump(value,open("ErrorLog","wb"))     
+  pickle.dump(value,open("ErrorLog","wb"))       
 
 def calRobotJ3():
-  # global RUN['VR_angles']
+  RUN['estopActive'] = False
+  message = "J3 Calibration In Process"
+  almStatusLab.config(text=message, style="OK.TLabel")
+  almStatusLab2.config(text=message, style="OK.TLabel")
+  tab1.update_idletasks()
+  tab1.update()
+  tab2.update_idletasks()
+  tab2.update()
   if RUN['offlineMode']:
     almStatusLab.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
     almStatusLab2.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
@@ -8446,24 +8479,33 @@ def calRobotJ3():
   cmdRecEntryField.insert(0,response)
   if (response[:1] == 'A'):
     displayPosition(response)  
-    message = "J3 Calibrated Successfully"
-    RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
-    setStepMonitorsVR()
-    almStatusLab.config(text=message, style="OK.TLabel")
-    almStatusLab2.config(text=message, style="OK.TLabel") 
+    if (not RUN['estopActive']):
+      message = "J3 Calibrated Successfully"
+      RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
+      setStepMonitorsVR()
+      almStatusLab.config(text=message, style="OK.TLabel")
+      almStatusLab2.config(text=message, style="OK.TLabel") 
   else:
     message = "J3 Calibrated Failed" 
     almStatusLab.config(text=message, style="Alarm.TLabel")
     almStatusLab2.config(text=message, style="Alarm.TLabel")
     ErrorHandler(response)
-  #Curtime = datetime.now().strftime("%B %d %Y - %I:%M%p")
-  #tab8.ElogView.insert(END, Curtime+" - "+message)
-  logger.error(message)
+  if "success" in message.strip().lower():
+    logger.info(message)
+  else:
+    logger.error(message)
   value=tab8.ElogView.get(0,END)
-  pickle.dump(value,open("ErrorLog","wb"))     
+  pickle.dump(value,open("ErrorLog","wb"))       
 
 def calRobotJ4():
-  # global RUN['VR_angles']
+  RUN['estopActive'] = False
+  message = "J4 Calibration In Process"
+  almStatusLab.config(text=message, style="OK.TLabel")
+  almStatusLab2.config(text=message, style="OK.TLabel")
+  tab1.update_idletasks()
+  tab1.update()
+  tab2.update_idletasks()
+  tab2.update()
   if RUN['offlineMode']:
     almStatusLab.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
     almStatusLab2.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
@@ -8478,24 +8520,33 @@ def calRobotJ4():
   cmdRecEntryField.insert(0,response)
   if (response[:1] == 'A'):
     displayPosition(response)  
-    message = "J4 Calibrated Successfully"
-    RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
-    setStepMonitorsVR()
-    almStatusLab.config(text=message, style="OK.TLabel")
-    almStatusLab2.config(text=message, style="OK.TLabel" ) 
+    if (not RUN['estopActive']):
+      message = "J4 Calibrated Successfully"
+      RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
+      setStepMonitorsVR()
+      almStatusLab.config(text=message, style="OK.TLabel")
+      almStatusLab2.config(text=message, style="OK.TLabel" ) 
   else:
     message = "J4 Calibrated Failed" 
     almStatusLab.config(text=message, style="Alarm.TLabel")
     almStatusLab2.config(text=message, style="Alarm.TLabel")
     ErrorHandler(response)
-  #Curtime = datetime.now().strftime("%B %d %Y - %I:%M%p")
-  #tab8.ElogView.insert(END, Curtime+" - "+message)
-  logger.error(message)
+  if "success" in message.strip().lower():
+    logger.info(message)
+  else:
+    logger.error(message)
   value=tab8.ElogView.get(0,END)
-  pickle.dump(value,open("ErrorLog","wb"))     
+  pickle.dump(value,open("ErrorLog","wb"))      
 
 def calRobotJ5():
-  # global RUN['VR_angles']
+  RUN['estopActive'] = False
+  message = "J5 Calibration In Process"
+  almStatusLab.config(text=message, style="OK.TLabel")
+  almStatusLab2.config(text=message, style="OK.TLabel")
+  tab1.update_idletasks()
+  tab1.update()
+  tab2.update_idletasks()
+  tab2.update()
   if RUN['offlineMode']:
     almStatusLab.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
     almStatusLab2.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
@@ -8510,24 +8561,33 @@ def calRobotJ5():
   cmdRecEntryField.insert(0,response)
   if (response[:1] == 'A'):
     displayPosition(response)  
-    message = "J5 Calibrated Successfully"
-    RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
-    setStepMonitorsVR()
-    almStatusLab.config(text=message, style="OK.TLabel")
-    almStatusLab2.config(text=message, style="OK.TLabel") 
+    if (not RUN['estopActive']):
+      message = "J5 Calibrated Successfully"
+      RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
+      setStepMonitorsVR()
+      almStatusLab.config(text=message, style="OK.TLabel")
+      almStatusLab2.config(text=message, style="OK.TLabel") 
   else:
     message = "J5 Calibrated Failed" 
     almStatusLab.config(text=message, style="Alarm.TLabel")
     almStatusLab2.config(text=message, style="Alarm.TLabel")
     ErrorHandler(response)
-  #Curtime = datetime.now().strftime("%B %d %Y - %I:%M%p")
-  #tab8.ElogView.insert(END, Curtime+" - "+message)
-  logger.error(message)
+  if "success" in message.strip().lower():
+    logger.info(message)
+  else:
+    logger.error(message)
   value=tab8.ElogView.get(0,END)
-  pickle.dump(value,open("ErrorLog","wb"))     
+  pickle.dump(value,open("ErrorLog","wb"))      
 
 def calRobotJ6():
-  # global RUN['VR_angles']
+  RUN['estopActive'] = False
+  message = "J6 Calibration In Process"
+  almStatusLab.config(text=message, style="OK.TLabel")
+  almStatusLab2.config(text=message, style="OK.TLabel")
+  tab1.update_idletasks()
+  tab1.update()
+  tab2.update_idletasks()
+  tab2.update()
   if RUN['offlineMode']:
     almStatusLab.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
     almStatusLab2.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
@@ -8542,23 +8602,33 @@ def calRobotJ6():
   cmdRecEntryField.insert(0,response)
   if (response[:1] == 'A'):
     displayPosition(response)  
-    message = "J6 Calibrated Successfully"
-    RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
-    setStepMonitorsVR()
-    almStatusLab.config(text=message, style="OK.TLabel")
-    almStatusLab2.config(text=message, style="OK.TLabel") 
+    if (not RUN['estopActive']):
+      message = "J6 Calibrated Successfully"
+      RUN['VR_angles'] = [float(CAL['J1AngCur']), float(CAL['J2AngCur']), float(CAL['J3AngCur']), float(CAL['J4AngCur']), float(CAL['J5AngCur']), float(CAL['J6AngCur'])]
+      setStepMonitorsVR()
+      almStatusLab.config(text=message, style="OK.TLabel")
+      almStatusLab2.config(text=message, style="OK.TLabel") 
   else:
     message = "J6 Calibrated Failed" 
     almStatusLab.config(text=message, style="Alarm.TLabel")
     almStatusLab2.config(text=message, style="Alarm.TLabel")
     ErrorHandler(response)
-  #Curtime = datetime.now().strftime("%B %d %Y - %I:%M%p")
-  #tab8.ElogView.insert(END, Curtime+" - "+message)
-  logger.error(message)
+  if "success" in message.strip().lower():
+    logger.info(message)
+  else:
+    logger.error(message)
   value=tab8.ElogView.get(0,END)
   pickle.dump(value,open("ErrorLog","wb"))   
 
 def calRobotJ7():
+  RUN['estopActive'] = False
+  message = "J7 Calibration In Process"
+  almStatusLab.config(text=message, style="OK.TLabel")
+  almStatusLab2.config(text=message, style="OK.TLabel")
+  tab1.update_idletasks()
+  tab1.update()
+  tab2.update_idletasks()
+  tab2.update()
   if RUN['offlineMode']:
     almStatusLab.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
     almStatusLab2.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
@@ -8573,21 +8643,31 @@ def calRobotJ7():
   cmdRecEntryField.insert(0,response)
   if (response[:1] == 'A'):
     displayPosition(response)  
-    message = "J7 Calibrated Successfully"
-    almStatusLab.config(text=message, style="OK.TLabel")
-    almStatusLab2.config(text=message, style="OK.TLabel") 
+    if (not RUN['estopActive']):
+      message = "J7 Calibrated Successfully"
+      almStatusLab.config(text=message, style="OK.TLabel")
+      almStatusLab2.config(text=message, style="OK.TLabel") 
   else:
     message = "J7 Calibrated Failed" 
     almStatusLab.config(text=message, style="Alarm.TLabel")
     almStatusLab2.config(text=message, style="Alarm.TLabel")
     ErrorHandler(response)
-  #Curtime = datetime.now().strftime("%B %d %Y - %I:%M%p")
-  #tab8.ElogView.insert(END, Curtime+" - "+message)
-  logger.error(message)
+  if "success" in message.strip().lower():
+    logger.info(message)
+  else:
+    logger.error(message)
   value=tab8.ElogView.get(0,END)
-  pickle.dump(value,open("ErrorLog","wb")) 
+  pickle.dump(value,open("ErrorLog","wb"))  
 
 def calRobotJ8():
+  RUN['estopActive'] = False
+  message = "J8 Calibration In Process"
+  almStatusLab.config(text=message, style="OK.TLabel")
+  almStatusLab2.config(text=message, style="OK.TLabel")
+  tab1.update_idletasks()
+  tab1.update()
+  tab2.update_idletasks()
+  tab2.update()
   if RUN['offlineMode']:
     almStatusLab.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
     return
@@ -8601,21 +8681,31 @@ def calRobotJ8():
   cmdRecEntryField.insert(0,response)
   if (response[:1] == 'A'):
     displayPosition(response)  
-    message = "J8 Calibrated Successfully"
-    almStatusLab.config(text=message, style="OK.TLabel")
-    almStatusLab2.config(text=message, style="OK.TLabel") 
+    if (not RUN['estopActive']):
+      message = "J8 Calibrated Successfully"
+      almStatusLab.config(text=message, style="OK.TLabel")
+      almStatusLab2.config(text=message, style="OK.TLabel") 
   else:
     message = "J8 Calibrated Failed" 
     almStatusLab.config(text=message, style="Alarm.TLabel")
     almStatusLab2.config(text=message, style="Alarm.TLabel")
     ErrorHandler(response)
-  #Curtime = datetime.now().strftime("%B %d %Y - %I:%M%p")
-  #tab8.ElogView.insert(END, Curtime+" - "+message)
-  logger.error(message)
+  if "success" in message.strip().lower():
+    logger.info(message)
+  else:
+    logger.error(message)
   value=tab8.ElogView.get(0,END)
-  pickle.dump(value,open("ErrorLog","wb"))    
+  pickle.dump(value,open("ErrorLog","wb"))     
 
 def calRobotJ9():
+  RUN['estopActive'] = False
+  message = "J9 Calibration In Process"
+  almStatusLab.config(text=message, style="OK.TLabel")
+  almStatusLab2.config(text=message, style="OK.TLabel")
+  tab1.update_idletasks()
+  tab1.update()
+  tab2.update_idletasks()
+  tab2.update()
   if RUN['offlineMode']:
     almStatusLab.config(text="Calibration not supported in offline mode", style="Alarm.TLabel")
     return
@@ -8629,19 +8719,21 @@ def calRobotJ9():
   cmdRecEntryField.insert(0,response)
   if (response[:1] == 'A'):
     displayPosition(response)  
-    message = "J9 Calibrated Successfully"
-    almStatusLab.config(text=message, style="OK.TLabel")
-    almStatusLab2.config(text=message, style="OK.TLabel") 
+    if (not RUN['estopActive']):
+      message = "J9 Calibrated Successfully"
+      almStatusLab.config(text=message, style="OK.TLabel")
+      almStatusLab2.config(text=message, style="OK.TLabel") 
   else:
     message = "J9 Calibrated Failed" 
     almStatusLab.config(text=message, style="Alarm.TLabel")
     almStatusLab2.config(text=message, style="Alarm.TLabel")
     ErrorHandler(response)
-  #Curtime = datetime.now().strftime("%B %d %Y - %I:%M%p")
-  #tab8.ElogView.insert(END, Curtime+" - "+message)
-  logger.error(message)
+  if "success" in message.strip().lower():
+    logger.info(message)
+  else:
+    logger.error(message)
   value=tab8.ElogView.get(0,END)
-  pickle.dump(value,open("ErrorLog","wb"))             
+  pickle.dump(value,open("ErrorLog","wb"))              
 	
 
 
@@ -8663,123 +8755,166 @@ def requestPos():
   displayPosition(response) 
 
 def updateParams():
-  CAL['TFx']  = TFxEntryField.get()
-  CAL['TFy']  = TFyEntryField.get()
-  CAL['TFz']  = TFzEntryField.get()
-  CAL['TFrz'] = TFrzEntryField.get()
-  CAL['TFry'] = TFryEntryField.get()
-  CAL['TFrx'] = TFrxEntryField.get()
-  CAL['J1MotDir'] = J1MotDirEntryField.get()
-  CAL['J2MotDir'] = J2MotDirEntryField.get()
-  CAL['J3MotDir'] = J3MotDirEntryField.get()
-  CAL['J4MotDir'] = J4MotDirEntryField.get()
-  CAL['J5MotDir'] = J5MotDirEntryField.get()
-  CAL['J6MotDir'] = J6MotDirEntryField.get()
-  CAL['J7MotDir'] = J7MotDirEntryField.get()
-  CAL['J8MotDir'] = J8MotDirEntryField.get()
-  CAL['J9MotDir'] = J9MotDirEntryField.get()
-  CAL['J1CalDir'] = J1CalDirEntryField.get()
-  CAL['J2CalDir'] = J2CalDirEntryField.get()
-  CAL['J3CalDir'] = J3CalDirEntryField.get()
-  CAL['J4CalDir'] = J4CalDirEntryField.get()
-  CAL['J5CalDir'] = J5CalDirEntryField.get()
-  CAL['J6CalDir'] = J6CalDirEntryField.get()
-  CAL['J7CalDir'] = J7CalDirEntryField.get()
-  CAL['J8CalDir'] = J8CalDirEntryField.get()
-  CAL['J9CalDir'] = J9CalDirEntryField.get()
-  CAL['J1PosLim'] = J1PosLimEntryField.get()
-  CAL['J1NegLim'] = J1NegLimEntryField.get()
-  CAL['J2PosLim'] = J2PosLimEntryField.get()
-  CAL['J2NegLim'] = J2NegLimEntryField.get()
-  CAL['J3PosLim'] = J3PosLimEntryField.get()
-  CAL['J3NegLim'] = J3NegLimEntryField.get()
-  CAL['J4PosLim'] = J4PosLimEntryField.get()
-  CAL['J4NegLim'] = J4NegLimEntryField.get()
-  CAL['J5PosLim'] = J5PosLimEntryField.get()
-  CAL['J5NegLim'] = J5NegLimEntryField.get()
-  CAL['J6PosLim'] = J6PosLimEntryField.get()
-  CAL['J6NegLim'] = J6NegLimEntryField.get()
-  CAL['J1StepDeg'] = J1StepDegEntryField.get()
-  CAL['J2StepDeg'] = J2StepDegEntryField.get()
-  CAL['J3StepDeg'] = J3StepDegEntryField.get()
-  CAL['J4StepDeg'] = J4StepDegEntryField.get()
-  CAL['J5StepDeg'] = J5StepDegEntryField.get()
-  CAL['J6StepDeg'] = J6StepDegEntryField.get()
-  J1EncMult = str(float(J1EncCPREntryField.get())/float(J1DriveMSEntryField.get()))
-  J2EncMult = str(float(J2EncCPREntryField.get())/float(J2DriveMSEntryField.get()))
-  J3EncMult = str(float(J3EncCPREntryField.get())/float(J3DriveMSEntryField.get()))
-  J4EncMult = str(float(J4EncCPREntryField.get())/float(J4DriveMSEntryField.get()))
-  J5EncMult = str(float(J5EncCPREntryField.get())/float(J5DriveMSEntryField.get()))
-  J6EncMult = str(float(J6EncCPREntryField.get())/float(J6DriveMSEntryField.get()))
-  CAL['J1ΘDHpar'] = J1ΘEntryField.get()
-  CAL['J2ΘDHpar'] = J2ΘEntryField.get()
-  CAL['J3ΘDHpar'] = J3ΘEntryField.get()
-  CAL['J4ΘDHpar'] = J4ΘEntryField.get()
-  CAL['J5ΘDHpar'] = J5ΘEntryField.get()
-  CAL['J6ΘDHpar'] = J6ΘEntryField.get()
-  CAL['J1αDHpar'] = J1αEntryField.get()
-  CAL['J2αDHpar'] = J2αEntryField.get()
-  CAL['J3αDHpar'] = J3αEntryField.get()
-  CAL['J4αDHpar'] = J4αEntryField.get()
-  CAL['J5αDHpar'] = J5αEntryField.get()
-  CAL['J6αDHpar'] = J6αEntryField.get()
-  CAL['J1dDHpar'] = J1dEntryField.get()
-  CAL['J2dDHpar'] = J2dEntryField.get()
-  CAL['J3dDHpar'] = J3dEntryField.get()
-  CAL['J4dDHpar'] = J4dEntryField.get()
-  CAL['J5dDHpar'] = J5dEntryField.get()
-  CAL['J6dDHpar'] = J6dEntryField.get()
-  CAL['J1aDHpar'] = J1aEntryField.get()
-  CAL['J2aDHpar'] = J2aEntryField.get()
-  CAL['J3aDHpar'] = J3aEntryField.get()
-  CAL['J4aDHpar'] = J4aEntryField.get()
-  CAL['J5aDHpar'] = J5aEntryField.get()
-  CAL['J6aDHpar'] = J6aEntryField.get()
+    CAL['TFx']  = TFxEntryField.get()
+    CAL['TFy']  = TFyEntryField.get()
+    CAL['TFz']  = TFzEntryField.get()
+    CAL['TFrz'] = TFrzEntryField.get()
+    CAL['TFry'] = TFryEntryField.get()
+    CAL['TFrx'] = TFrxEntryField.get()
 
-  update_CPP_kin_from_entries()
+    CAL['J1MotDir'] = J1MotDirEntryField.get()
+    CAL['J2MotDir'] = J2MotDirEntryField.get()
+    CAL['J3MotDir'] = J3MotDirEntryField.get()
+    CAL['J4MotDir'] = J4MotDirEntryField.get()
+    CAL['J5MotDir'] = J5MotDirEntryField.get()
+    CAL['J6MotDir'] = J6MotDirEntryField.get()
+    CAL['J7MotDir'] = J7MotDirEntryField.get()
+    CAL['J8MotDir'] = J8MotDirEntryField.get()
+    CAL['J9MotDir'] = J9MotDirEntryField.get()
 
-  J1negLimLab.config(text="-"+CAL['J1NegLim'], style="Jointlim.TLabel")
-  J1posLimLab.config(text=CAL['J1PosLim'], style="Jointlim.TLabel")
-  J1jogslide.config(from_=float("-"+CAL['J1NegLim']), to=float(CAL['J1PosLim']),  length=180, orient=HORIZONTAL,  command=J1sliderUpdate)
-  J2negLimLab.config(text="-"+CAL['J2NegLim'], style="Jointlim.TLabel")
-  J2posLimLab.config(text=CAL['J2PosLim'], style="Jointlim.TLabel")
-  J2jogslide.config(from_=float("-"+CAL['J2NegLim']), to=float(CAL['J2PosLim']),  length=180, orient=HORIZONTAL,  command=J2sliderUpdate)
-  J3negLimLab.config(text="-"+CAL['J3NegLim'], style="Jointlim.TLabel")
-  J3posLimLab.config(text=CAL['J3PosLim'], style="Jointlim.TLabel")
-  J3jogslide.config(from_=float("-"+CAL['J3NegLim']), to=float(CAL['J3PosLim']),  length=180, orient=HORIZONTAL,  command=J3sliderUpdate)
-  J4negLimLab.config(text="-"+CAL['J4NegLim'], style="Jointlim.TLabel")
-  J4posLimLab.config(text=CAL['J4PosLim'], style="Jointlim.TLabel")
-  J4jogslide.config(from_=float("-"+CAL['J4NegLim']), to=float(CAL['J4PosLim']),  length=180, orient=HORIZONTAL,  command=J4sliderUpdate)
-  J5negLimLab.config(text="-"+CAL['J5NegLim'], style="Jointlim.TLabel")
-  J5posLimLab.config(text=CAL['J5PosLim'], style="Jointlim.TLabel")
-  J5jogslide.config(from_=float("-"+CAL['J5NegLim']), to=float(CAL['J5PosLim']),  length=180, orient=HORIZONTAL,  command=J5sliderUpdate)
-  J6negLimLab.config(text="-"+CAL['J6NegLim'], style="Jointlim.TLabel")
-  J6posLimLab.config(text=CAL['J6PosLim'], style="Jointlim.TLabel")
-  J6jogslide.config(from_=float("-"+CAL['J6NegLim']), to=float(CAL['J6PosLim']),  length=180, orient=HORIZONTAL,  command=J6sliderUpdate)
+    CAL['J1CalDir'] = J1CalDirEntryField.get()
+    CAL['J2CalDir'] = J2CalDirEntryField.get()
+    CAL['J3CalDir'] = J3CalDirEntryField.get()
+    CAL['J4CalDir'] = J4CalDirEntryField.get()
+    CAL['J5CalDir'] = J5CalDirEntryField.get()
+    CAL['J6CalDir'] = J6CalDirEntryField.get()
+    CAL['J7CalDir'] = J7CalDirEntryField.get()
+    CAL['J8CalDir'] = J8CalDirEntryField.get()
+    CAL['J9CalDir'] = J9CalDirEntryField.get()
 
-  command = "UP"+"A"+CAL['TFx']+"B"+CAL['TFy']+"C"+CAL['TFz']+"D"+CAL['TFrz']+"E"+CAL['TFry']+"F"+CAL['TFrx']+\
-  "G"+CAL['J1MotDir']+"H"+CAL['J2MotDir']+"I"+CAL['J3MotDir']+"J"+CAL['J4MotDir']+"K"+CAL['J5MotDir']+"L"+CAL['J6MotDir']+"M"+CAL['J7MotDir']+"N"+CAL['J8MotDir']+"O"+CAL['J9MotDir']+\
-  "P"+CAL['J1CalDir']+"Q"+CAL['J2CalDir']+"R"+CAL['J3CalDir']+"S"+CAL['J4CalDir']+"T"+CAL['J5CalDir']+"U"+CAL['J6CalDir']+"V"+CAL['J7CalDir']+"W"+CAL['J8CalDir']+"X"+CAL['J9CalDir']+\
-  "Y"+CAL['J1PosLim']+"Z"+CAL['J1NegLim']+"a"+CAL['J2PosLim']+"b"+CAL['J2NegLim']+"c"+CAL['J3PosLim']+"d"+CAL['J3NegLim']+"e"+CAL['J4PosLim']+"f"+CAL['J4NegLim']+"g"+CAL['J5PosLim']+"h"+CAL['J5NegLim']+"i"+CAL['J6PosLim']+"j"+CAL['J6NegLim']+\
-  "k"+CAL['J1StepDeg']+"l"+CAL['J2StepDeg']+"m"+CAL['J3StepDeg']+"n"+CAL['J4StepDeg']+"o"+CAL['J5StepDeg']+"p"+CAL['J6StepDeg']+\
-  "q"+J1EncMult+"r"+J2EncMult+"s"+J3EncMult+"t"+J4EncMult+"u"+J5EncMult+"v"+J6EncMult+\
-  "w"+CAL['J1ΘDHpar']+"x"+CAL['J2ΘDHpar']+"y"+CAL['J3ΘDHpar']+"z"+CAL['J4ΘDHpar']+"!"+CAL['J5ΘDHpar']+"@"+CAL['J6ΘDHpar']+\
-  "#"+CAL['J1αDHpar']+"$"+CAL['J2αDHpar']+"%"+CAL['J3αDHpar']+"^"+CAL['J4αDHpar']+"&"+CAL['J5αDHpar']+"*"+CAL['J6αDHpar']+\
-  "("+CAL['J1dDHpar']+")"+CAL['J2dDHpar']+"+"+CAL['J3dDHpar']+"="+CAL['J4dDHpar']+","+CAL['J5dDHpar']+"_"+CAL['J6dDHpar']+\
-  "<"+CAL['J1aDHpar']+">"+CAL['J2aDHpar']+"?"+CAL['J3aDHpar']+"{"+CAL['J4aDHpar']+"}"+CAL['J5aDHpar']+"~"+CAL['J6aDHpar']+\
-  "\n"
-  try:
-    RUN['ser'].write(command.encode())
-    RUN['ser'].flush()
-    time.sleep(.1)    
-    RUN['ser'].flushInput()
-    time.sleep(.1)
-    response = RUN['ser'].read_all()
-  except Exception as e:
-    if RUN['ser'] in locals():
-      logger.error("Serial error: "+str(e))
-    else:
-      logger.error("Serial port not open")
+    CAL['J1CalSwitch'] = J1CalHighLowEntryField.get()
+    CAL['J2CalSwitch'] = J2CalHighLowEntryField.get()
+    CAL['J3CalSwitch'] = J3CalHighLowEntryField.get()
+    CAL['J4CalSwitch'] = J4CalHighLowEntryField.get()
+    CAL['J5CalSwitch'] = J5CalHighLowEntryField.get()
+    CAL['J6CalSwitch'] = J6CalHighLowEntryField.get()
+    CAL['J7CalSwitch'] = J7CalHighLowEntryField.get()
+    CAL['J8CalSwitch'] = J8CalHighLowEntryField.get()
+    CAL['J9CalSwitch'] = J9CalHighLowEntryField.get()
+
+    CAL['J1PosLim'] = J1PosLimEntryField.get()
+    CAL['J1NegLim'] = J1NegLimEntryField.get()
+    CAL['J2PosLim'] = J2PosLimEntryField.get()
+    CAL['J2NegLim'] = J2NegLimEntryField.get()
+    CAL['J3PosLim'] = J3PosLimEntryField.get()
+    CAL['J3NegLim'] = J3NegLimEntryField.get()
+    CAL['J4PosLim'] = J4PosLimEntryField.get()
+    CAL['J4NegLim'] = J4NegLimEntryField.get()
+    CAL['J5PosLim'] = J5PosLimEntryField.get()
+    CAL['J5NegLim'] = J5NegLimEntryField.get()
+    CAL['J6PosLim'] = J6PosLimEntryField.get()
+    CAL['J6NegLim'] = J6NegLimEntryField.get()
+
+    CAL['J1StepDeg'] = J1StepDegEntryField.get()
+    CAL['J2StepDeg'] = J2StepDegEntryField.get()
+    CAL['J3StepDeg'] = J3StepDegEntryField.get()
+    CAL['J4StepDeg'] = J4StepDegEntryField.get()
+    CAL['J5StepDeg'] = J5StepDegEntryField.get()
+    CAL['J6StepDeg'] = J6StepDegEntryField.get()
+
+    J1EncMult = str(float(J1EncCPREntryField.get()) / float(J1DriveMSEntryField.get()))
+    J2EncMult = str(float(J2EncCPREntryField.get()) / float(J2DriveMSEntryField.get()))
+    J3EncMult = str(float(J3EncCPREntryField.get()) / float(J3DriveMSEntryField.get()))
+    J4EncMult = str(float(J4EncCPREntryField.get()) / float(J4DriveMSEntryField.get()))
+    J5EncMult = str(float(J5EncCPREntryField.get()) / float(J5DriveMSEntryField.get()))
+    J6EncMult = str(float(J6EncCPREntryField.get()) / float(J6DriveMSEntryField.get()))
+
+    CAL['J1ΘDHpar'] = J1ΘEntryField.get()
+    CAL['J2ΘDHpar'] = J2ΘEntryField.get()
+    CAL['J3ΘDHpar'] = J3ΘEntryField.get()
+    CAL['J4ΘDHpar'] = J4ΘEntryField.get()
+    CAL['J5ΘDHpar'] = J5ΘEntryField.get()
+    CAL['J6ΘDHpar'] = J6ΘEntryField.get()
+
+    CAL['J1αDHpar'] = J1αEntryField.get()
+    CAL['J2αDHpar'] = J2αEntryField.get()
+    CAL['J3αDHpar'] = J3αEntryField.get()
+    CAL['J4αDHpar'] = J4αEntryField.get()
+    CAL['J5αDHpar'] = J5αEntryField.get()
+    CAL['J6αDHpar'] = J6αEntryField.get()
+
+    CAL['J1dDHpar'] = J1dEntryField.get()
+    CAL['J2dDHpar'] = J2dEntryField.get()
+    CAL['J3dDHpar'] = J3dEntryField.get()
+    CAL['J4dDHpar'] = J4dEntryField.get()
+    CAL['J5dDHpar'] = J5dEntryField.get()
+    CAL['J6dDHpar'] = J6dEntryField.get()
+
+    CAL['J1aDHpar'] = J1aEntryField.get()
+    CAL['J2aDHpar'] = J2aEntryField.get()
+    CAL['J3aDHpar'] = J3aEntryField.get()
+    CAL['J4aDHpar'] = J4aEntryField.get()
+    CAL['J5aDHpar'] = J5aEntryField.get()
+    CAL['J6aDHpar'] = J6aEntryField.get()
+
+    update_CPP_kin_from_entries()
+
+    J1negLimLab.config(text="-" + CAL['J1NegLim'], style="Jointlim.TLabel")
+    J1posLimLab.config(text=CAL['J1PosLim'], style="Jointlim.TLabel")
+    J1jogslide.config(from_=float("-" + CAL['J1NegLim']), to=float(CAL['J1PosLim']), length=180, orient=HORIZONTAL, command=J1sliderUpdate)
+
+    J2negLimLab.config(text="-" + CAL['J2NegLim'], style="Jointlim.TLabel")
+    J2posLimLab.config(text=CAL['J2PosLim'], style="Jointlim.TLabel")
+    J2jogslide.config(from_=float("-" + CAL['J2NegLim']), to=float(CAL['J2PosLim']), length=180, orient=HORIZONTAL, command=J2sliderUpdate)
+
+    J3negLimLab.config(text="-" + CAL['J3NegLim'], style="Jointlim.TLabel")
+    J3posLimLab.config(text=CAL['J3PosLim'], style="Jointlim.TLabel")
+    J3jogslide.config(from_=float("-" + CAL['J3NegLim']), to=float(CAL['J3PosLim']), length=180, orient=HORIZONTAL, command=J3sliderUpdate)
+
+    J4negLimLab.config(text="-" + CAL['J4NegLim'], style="Jointlim.TLabel")
+    J4posLimLab.config(text=CAL['J4PosLim'], style="Jointlim.TLabel")
+    J4jogslide.config(from_=float("-" + CAL['J4NegLim']), to=float(CAL['J4PosLim']), length=180, orient=HORIZONTAL, command=J4sliderUpdate)
+
+    J5negLimLab.config(text="-" + CAL['J5NegLim'], style="Jointlim.TLabel")
+    J5posLimLab.config(text=CAL['J5PosLim'], style="Jointlim.TLabel")
+    J5jogslide.config(from_=float("-" + CAL['J5NegLim']), to=float(CAL['J5PosLim']), length=180, orient=HORIZONTAL, command=J5sliderUpdate)
+
+    J6negLimLab.config(text="-" + CAL['J6NegLim'], style="Jointlim.TLabel")
+    J6posLimLab.config(text=CAL['J6PosLim'], style="Jointlim.TLabel")
+    J6jogslide.config(from_=float("-" + CAL['J6NegLim']), to=float(CAL['J6PosLim']), length=180, orient=HORIZONTAL, command=J6sliderUpdate)
+
+    # Build one ordered payload list
+    payload = [
+        CAL['TFx'], CAL['TFy'], CAL['TFz'], CAL['TFrz'], CAL['TFry'], CAL['TFrx'],
+
+        CAL['J1MotDir'], CAL['J2MotDir'], CAL['J3MotDir'], CAL['J4MotDir'], CAL['J5MotDir'], CAL['J6MotDir'], CAL['J7MotDir'], CAL['J8MotDir'], CAL['J9MotDir'],
+
+        CAL['J1CalDir'], CAL['J2CalDir'], CAL['J3CalDir'], CAL['J4CalDir'], CAL['J5CalDir'], CAL['J6CalDir'], CAL['J7CalDir'], CAL['J8CalDir'], CAL['J9CalDir'],
+
+        CAL['J1CalSwitch'], CAL['J2CalSwitch'], CAL['J3CalSwitch'], CAL['J4CalSwitch'], CAL['J5CalSwitch'], CAL['J6CalSwitch'], CAL['J7CalSwitch'], CAL['J8CalSwitch'], CAL['J9CalSwitch'],
+
+        CAL['J1PosLim'], CAL['J1NegLim'],
+        CAL['J2PosLim'], CAL['J2NegLim'],
+        CAL['J3PosLim'], CAL['J3NegLim'],
+        CAL['J4PosLim'], CAL['J4NegLim'],
+        CAL['J5PosLim'], CAL['J5NegLim'],
+        CAL['J6PosLim'], CAL['J6NegLim'],
+
+        CAL['J1StepDeg'], CAL['J2StepDeg'], CAL['J3StepDeg'], CAL['J4StepDeg'], CAL['J5StepDeg'], CAL['J6StepDeg'],
+
+        J1EncMult, J2EncMult, J3EncMult, J4EncMult, J5EncMult, J6EncMult,
+
+        CAL['J1ΘDHpar'], CAL['J2ΘDHpar'], CAL['J3ΘDHpar'], CAL['J4ΘDHpar'], CAL['J5ΘDHpar'], CAL['J6ΘDHpar'],
+        CAL['J1αDHpar'], CAL['J2αDHpar'], CAL['J3αDHpar'], CAL['J4αDHpar'], CAL['J5αDHpar'], CAL['J6αDHpar'],
+        CAL['J1dDHpar'], CAL['J2dDHpar'], CAL['J3dDHpar'], CAL['J4dDHpar'], CAL['J5dDHpar'], CAL['J6dDHpar'],
+        CAL['J1aDHpar'], CAL['J2aDHpar'], CAL['J3aDHpar'], CAL['J4aDHpar'], CAL['J5aDHpar'], CAL['J6aDHpar'],
+    ]
+
+    # Optional safety check: make sure commas are not in any field
+    payload = [str(x).replace(",", "") for x in payload]
+
+    command = "UP," + ",".join(payload) + "\n"
+
+    try:
+        RUN['ser'].reset_input_buffer()
+        RUN['ser'].write(command.encode("utf-8"))
+        RUN['ser'].flush()
+        time.sleep(0.1)
+        response = str(RUN['ser'].readline().strip(),'utf-8')
+        if (response[:1] == 'E'):
+          ErrorHandler(response)
+    except Exception as e:
+        logger.error(f"Serial error: {e}")
 
 def calExtAxis():
   J7NegLim = 0
@@ -8867,7 +9002,7 @@ def sendPos():
 def CalZeroPos():
   # global RUN['VR_angles']
   #Curtime = datetime.now().strftime("%B %d %Y - %I:%M%p")
-  command = "SPA0B0C0D0E90F0\n"
+  command = "SPA0B0C0D0E45F0\n"
   RUN['ser'].write(command.encode())    
   RUN['ser'].flushInput()
   time.sleep(.1)
@@ -8906,8 +9041,6 @@ def CalRestPos():
 
 
 def displayPosition(response):
-  # global WC, RUN['VR_angles'] 
-
   cmdRecEntryField.delete(0, 'end')
   cmdRecEntryField.insert(0,response)
   J1AngIndex = response.find('A')
@@ -8948,9 +9081,6 @@ def displayPosition(response):
   SpeedVioation = response[SpeedVioIndex+1:DebugIndex].strip();
   Debug = response[DebugIndex+1:FlagIndex].strip();
   Flag = response[FlagIndex+1:J7PosIndex].strip();
-  #J7PosCur = float(response[J7PosIndex+1:J8PosIndex].strip());
-  #J8PosCur = float(response[J8PosIndex+1:J9PosIndex].strip());
-  #J9PosCur = float(response[J9PosIndex+1:].strip());
   CAL['J7PosCur'] = response[J7PosIndex+1:J8PosIndex].strip();
   CAL['J8PosCur'] = response[J8PosIndex+1:J9PosIndex].strip();
   CAL['J9PosCur'] = response[J9PosIndex+1:].strip();
@@ -9084,6 +9214,99 @@ def ClearKinTabFields():
   J4aEntryField.delete(0, 'end')
   J5aEntryField.delete(0, 'end')
   J6aEntryField.delete(0, 'end')
+  J1CalHighLowEntryField.delete(0,'end')
+  J2CalHighLowEntryField.delete(0,'end')
+  J3CalHighLowEntryField.delete(0,'end')
+  J4CalHighLowEntryField.delete(0,'end')
+  J5CalHighLowEntryField.delete(0,'end')
+  J6CalHighLowEntryField.delete(0,'end')
+  J7CalHighLowEntryField.delete(0,'end')
+  J8CalHighLowEntryField.delete(0,'end')
+  J9CalHighLowEntryField.delete(0,'end')
+
+def LoadAR4Mk5default():
+  ClearKinTabFields()
+  J1MotDirEntryField.insert(0,str(0))
+  J2MotDirEntryField.insert(0,str(1))
+  J3MotDirEntryField.insert(0,str(1))
+  J4MotDirEntryField.insert(0,str(1))
+  J5MotDirEntryField.insert(0,str(1))
+  J6MotDirEntryField.insert(0,str(1))
+  J7MotDirEntryField.insert(0,str(1))
+  J8MotDirEntryField.insert(0,str(1))
+  J9MotDirEntryField.insert(0,str(1))
+  J1CalDirEntryField.insert(0,str(1))
+  J2CalDirEntryField.insert(0,str(0))
+  J3CalDirEntryField.insert(0,str(1))
+  J4CalDirEntryField.insert(0,str(0))
+  J5CalDirEntryField.insert(0,str(0))
+  J6CalDirEntryField.insert(0,str(1))
+  J7CalDirEntryField.insert(0,str(0))
+  J8CalDirEntryField.insert(0,str(0))
+  J9CalDirEntryField.insert(0,str(0))
+  J1PosLimEntryField.insert(0,str(160))
+  J1NegLimEntryField.insert(0,str(160))
+  J2PosLimEntryField.insert(0,str(90))
+  J2NegLimEntryField.insert(0,str(42))
+  J3PosLimEntryField.insert(0,str(52))
+  J3NegLimEntryField.insert(0,str(89))
+  J4PosLimEntryField.insert(0,str(180))
+  J4NegLimEntryField.insert(0,str(180))
+  J5PosLimEntryField.insert(0,str(105))
+  J5NegLimEntryField.insert(0,str(105))
+  J6PosLimEntryField.insert(0,str(180))
+  J6NegLimEntryField.insert(0,str(180))  
+  J1StepDegEntryField.insert(0,str(88.888))
+  J2StepDegEntryField.insert(0,str(111.111)) 
+  J3StepDegEntryField.insert(0,str(111.111)) 
+  J4StepDegEntryField.insert(0,str(99.555)) 
+  J5StepDegEntryField.insert(0,str(43.720)) 
+  J6StepDegEntryField.insert(0,str(44.444))
+  J1DriveMSEntryField.insert(0,str(800))
+  J2DriveMSEntryField.insert(0,str(800))  
+  J3DriveMSEntryField.insert(0,str(800))  
+  J4DriveMSEntryField.insert(0,str(800))  
+  J5DriveMSEntryField.insert(0,str(1600))  
+  J6DriveMSEntryField.insert(0,str(800))
+  J1EncCPREntryField.insert(0,str(4000))
+  J2EncCPREntryField.insert(0,str(4000))
+  J3EncCPREntryField.insert(0,str(4000))
+  J4EncCPREntryField.insert(0,str(4000))
+  J5EncCPREntryField.insert(0,str(4000))
+  J6EncCPREntryField.insert(0,str(4000))
+  J1ΘEntryField.insert(0,str(0))
+  J2ΘEntryField.insert(0,str(-90))
+  J3ΘEntryField.insert(0,str(0))
+  J4ΘEntryField.insert(0,str(0))
+  J5ΘEntryField.insert(0,str(0))
+  J6ΘEntryField.insert(0,str(180))
+  J1αEntryField.insert(0,str(0))
+  J2αEntryField.insert(0,str(-90))
+  J3αEntryField.insert(0,str(0))
+  J4αEntryField.insert(0,str(-90))
+  J5αEntryField.insert(0,str(90))
+  J6αEntryField.insert(0,str(-90))
+  J1dEntryField.insert(0,str(169.77))
+  J2dEntryField.insert(0,str(0))
+  J3dEntryField.insert(0,str(0))
+  J4dEntryField.insert(0,str(222.63))
+  J5dEntryField.insert(0,str(0))
+  J6dEntryField.insert(0,str(41))
+  J1aEntryField.insert(0,str(0))
+  J2aEntryField.insert(0,str(64.2))
+  J3aEntryField.insert(0,str(305))
+  J4aEntryField.insert(0,str(0))
+  J5aEntryField.insert(0,str(0))
+  J6aEntryField.insert(0,str(0)) 
+  J1CalHighLowEntryField.insert(0,"LOW") 
+  J2CalHighLowEntryField.insert(0,"LOW")
+  J3CalHighLowEntryField.insert(0,"LOW")
+  J4CalHighLowEntryField.insert(0,"HIGH")
+  J5CalHighLowEntryField.insert(0,"HIGH")
+  J6CalHighLowEntryField.insert(0,"HIGH")
+  J7CalHighLowEntryField.insert(0,"HIGH")
+  J8CalHighLowEntryField.insert(0,"HIGH")
+  J9CalHighLowEntryField.insert(0,"HIGH") 
 
 
 def LoadAR4Mk3default():
@@ -9159,7 +9382,16 @@ def LoadAR4Mk3default():
   J3aEntryField.insert(0,str(305))
   J4aEntryField.insert(0,str(0))
   J5aEntryField.insert(0,str(0))
-  J6aEntryField.insert(0,str(0)) 
+  J6aEntryField.insert(0,str(0))
+  J1CalHighLowEntryField.insert(0,"HIGH") 
+  J2CalHighLowEntryField.insert(0,"HIGH")
+  J3CalHighLowEntryField.insert(0,"HIGH")
+  J4CalHighLowEntryField.insert(0,"HIGH")
+  J5CalHighLowEntryField.insert(0,"HIGH")
+  J6CalHighLowEntryField.insert(0,"HIGH")
+  J7CalHighLowEntryField.insert(0,"HIGH")
+  J8CalHighLowEntryField.insert(0,"HIGH")
+  J9CalHighLowEntryField.insert(0,"HIGH")  
 
 def LoadAR4Mk2default():
   ClearKinTabFields()
@@ -9196,7 +9428,7 @@ def LoadAR4Mk2default():
   J1StepDegEntryField.insert(0,str(44.4444))
   J2StepDegEntryField.insert(0,str(55.5555)) 
   J3StepDegEntryField.insert(0,str(55.5555)) 
-  J4StepDegEntryField.insert(0,str(49.7777)) 
+  J4StepDegEntryField.insert(0,str(42.7266)) 
   J5StepDegEntryField.insert(0,str(21.8602)) 
   J6StepDegEntryField.insert(0,str(22.2222))
   J1DriveMSEntryField.insert(0,str(400))
@@ -9234,7 +9466,16 @@ def LoadAR4Mk2default():
   J3aEntryField.insert(0,str(305))
   J4aEntryField.insert(0,str(0))
   J5aEntryField.insert(0,str(0))
-  J6aEntryField.insert(0,str(0)) 
+  J6aEntryField.insert(0,str(0))
+  J1CalHighLowEntryField.insert(0,"HIGH") 
+  J2CalHighLowEntryField.insert(0,"HIGH")
+  J3CalHighLowEntryField.insert(0,"HIGH")
+  J4CalHighLowEntryField.insert(0,"HIGH")
+  J5CalHighLowEntryField.insert(0,"HIGH")
+  J6CalHighLowEntryField.insert(0,"HIGH")
+  J7CalHighLowEntryField.insert(0,"HIGH")
+  J8CalHighLowEntryField.insert(0,"HIGH")
+  J9CalHighLowEntryField.insert(0,"HIGH")   
 
 
 def LoadAR4default():
@@ -9310,7 +9551,16 @@ def LoadAR4default():
   J3aEntryField.insert(0,str(305))
   J4aEntryField.insert(0,str(0))
   J5aEntryField.insert(0,str(0))
-  J6aEntryField.insert(0,str(0)) 
+  J6aEntryField.insert(0,str(0))
+  J1CalHighLowEntryField.insert(0,"HIGH") 
+  J2CalHighLowEntryField.insert(0,"HIGH")
+  J3CalHighLowEntryField.insert(0,"HIGH")
+  J4CalHighLowEntryField.insert(0,"HIGH")
+  J5CalHighLowEntryField.insert(0,"HIGH")
+  J6CalHighLowEntryField.insert(0,"HIGH")
+  J7CalHighLowEntryField.insert(0,"HIGH")
+  J8CalHighLowEntryField.insert(0,"HIGH")
+  J9CalHighLowEntryField.insert(0,"HIGH")   
 
 def LoadAR3default():
   ClearKinTabFields()
@@ -9385,7 +9635,100 @@ def LoadAR3default():
   J3aEntryField.insert(0,str(305))
   J4aEntryField.insert(0,str(0))
   J5aEntryField.insert(0,str(0))
-  J6aEntryField.insert(0,str(0)) 
+  J6aEntryField.insert(0,str(0))
+  J1CalHighLowEntryField.insert(0,"HIGH") 
+  J2CalHighLowEntryField.insert(0,"HIGH")
+  J3CalHighLowEntryField.insert(0,"HIGH")
+  J4CalHighLowEntryField.insert(0,"HIGH")
+  J5CalHighLowEntryField.insert(0,"HIGH")
+  J6CalHighLowEntryField.insert(0,"HIGH")
+  J7CalHighLowEntryField.insert(0,"HIGH")
+  J8CalHighLowEntryField.insert(0,"HIGH")
+  J9CalHighLowEntryField.insert(0,"HIGH")   
+
+def LoadMaxdefault():
+  ClearKinTabFields()
+  J1MotDirEntryField.insert(0,str(0))
+  J2MotDirEntryField.insert(0,str(1))
+  J3MotDirEntryField.insert(0,str(1))
+  J4MotDirEntryField.insert(0,str(1))
+  J5MotDirEntryField.insert(0,str(1))
+  J6MotDirEntryField.insert(0,str(1))
+  J7MotDirEntryField.insert(0,str(1))
+  J8MotDirEntryField.insert(0,str(1))
+  J9MotDirEntryField.insert(0,str(1))
+  J1CalDirEntryField.insert(0,str(1))
+  J2CalDirEntryField.insert(0,str(0))
+  J3CalDirEntryField.insert(0,str(1))
+  J4CalDirEntryField.insert(0,str(0))
+  J5CalDirEntryField.insert(0,str(0))
+  J6CalDirEntryField.insert(0,str(1))
+  J7CalDirEntryField.insert(0,str(0))
+  J8CalDirEntryField.insert(0,str(0))
+  J9CalDirEntryField.insert(0,str(0))
+  J1PosLimEntryField.insert(0,str(170))
+  J1NegLimEntryField.insert(0,str(170))
+  J2PosLimEntryField.insert(0,str(90))
+  J2NegLimEntryField.insert(0,str(42))
+  J3PosLimEntryField.insert(0,str(52))
+  J3NegLimEntryField.insert(0,str(89))
+  J4PosLimEntryField.insert(0,str(180))
+  J4NegLimEntryField.insert(0,str(180))
+  J5PosLimEntryField.insert(0,str(105))
+  J5NegLimEntryField.insert(0,str(105))
+  J6PosLimEntryField.insert(0,str(180))
+  J6NegLimEntryField.insert(0,str(180))  
+  J1StepDegEntryField.insert(0,str(1422.222))
+  J2StepDegEntryField.insert(0,str(1777.777)) 
+  J3StepDegEntryField.insert(0,str(1777.777)) 
+  J4StepDegEntryField.insert(0,str(1592.888)) 
+  J5StepDegEntryField.insert(0,str(349.763)) 
+  J6StepDegEntryField.insert(0,str(711.111))
+  J1DriveMSEntryField.insert(0,str(12800))
+  J2DriveMSEntryField.insert(0,str(12800))  
+  J3DriveMSEntryField.insert(0,str(12800))  
+  J4DriveMSEntryField.insert(0,str(12800))  
+  J5DriveMSEntryField.insert(0,str(12800))  
+  J6DriveMSEntryField.insert(0,str(12800))
+  J1EncCPREntryField.insert(0,str(4000))
+  J2EncCPREntryField.insert(0,str(4000))
+  J3EncCPREntryField.insert(0,str(4000))
+  J4EncCPREntryField.insert(0,str(4000))
+  J5EncCPREntryField.insert(0,str(4000))
+  J6EncCPREntryField.insert(0,str(4000))
+  J1ΘEntryField.insert(0,str(0))
+  J2ΘEntryField.insert(0,str(-90))
+  J3ΘEntryField.insert(0,str(0))
+  J4ΘEntryField.insert(0,str(0))
+  J5ΘEntryField.insert(0,str(0))
+  J6ΘEntryField.insert(0,str(180))
+  J1αEntryField.insert(0,str(0))
+  J2αEntryField.insert(0,str(-90))
+  J3αEntryField.insert(0,str(0))
+  J4αEntryField.insert(0,str(-90))
+  J5αEntryField.insert(0,str(90))
+  J6αEntryField.insert(0,str(-90))
+  J1dEntryField.insert(0,str(169.77))
+  J2dEntryField.insert(0,str(0))
+  J3dEntryField.insert(0,str(0))
+  J4dEntryField.insert(0,str(222.63))
+  J5dEntryField.insert(0,str(0))
+  J6dEntryField.insert(0,str(41))
+  J1aEntryField.insert(0,str(0))
+  J2aEntryField.insert(0,str(64.2))
+  J3aEntryField.insert(0,str(305))
+  J4aEntryField.insert(0,str(0))
+  J5aEntryField.insert(0,str(0))
+  J6aEntryField.insert(0,str(0))
+  J1CalHighLowEntryField.insert(0,"HIGH") 
+  J2CalHighLowEntryField.insert(0,"HIGH")
+  J3CalHighLowEntryField.insert(0,"HIGH")
+  J4CalHighLowEntryField.insert(0,"HIGH")
+  J5CalHighLowEntryField.insert(0,"HIGH")
+  J6CalHighLowEntryField.insert(0,"HIGH")
+  J7CalHighLowEntryField.insert(0,"HIGH")
+  J8CalHighLowEntryField.insert(0,"HIGH")
+  J9CalHighLowEntryField.insert(0,"HIGH")     
   
 def save_custom_calibration():
   sync_fields_to_calibration()
@@ -9474,7 +9817,17 @@ def sync_calibration_to_fields():
   J4aEntryField.insert(0,str(CAL['J4aDHpar']))
   J5aEntryField.insert(0,str(CAL['J5aDHpar']))
   J6aEntryField.insert(0,str(CAL['J6aDHpar']))
-  visoptions.set(str(CAL['curCam']))
+  J1CalHighLowEntryField.insert(0,str(CAL['J1CalSwitch']))
+  J2CalHighLowEntryField.insert(0,str(CAL['J2CalSwitch']))
+  J3CalHighLowEntryField.insert(0,str(CAL['J3CalSwitch']))
+  J4CalHighLowEntryField.insert(0,str(CAL['J4CalSwitch']))
+  J5CalHighLowEntryField.insert(0,str(CAL['J5CalSwitch']))
+  J6CalHighLowEntryField.insert(0,str(CAL['J6CalSwitch']))
+  J7CalHighLowEntryField.insert(0,str(CAL['J7CalSwitch']))
+  J8CalHighLowEntryField.insert(0,str(CAL['J8CalSwitch']))
+  J9CalHighLowEntryField.insert(0,str(CAL['J9CalSwitch']))
+
+
 
   # Add Encoder control checkboxes
   # Add auto-calibration settings
@@ -9507,6 +9860,29 @@ def sync_fields_to_calibration():
   CAL['J9length']     = float(axis9lengthEntryField.get())
   CAL['J9rotation']   = float(axis9rotEntryField.get())
   CAL['J9steps']      = float(axis9stepsEntryField.get())
+
+  CAL['VisBrightVal']   = float(VisBrightSlide.get())
+  CAL['VisContVal']     = float(VisContrastSlide.get())
+  CAL['VisBacColor']    = str(VisBacColorEntryField.get()) 
+  CAL['VisScore']       = float(VisScoreEntryField.get())
+  CAL['VisX1Val']       = int(VisX1PixEntryField.get())
+  CAL['VisY1Val']       = int(VisY1PixEntryField.get())
+  CAL['VisX2Val']       = int(VisX2PixEntryField.get())
+  CAL['VisY2Val']       = int(VisY2PixEntryField.get())
+  CAL['VisRobX1Val']    = float(VisX1RobEntryField.get())
+  CAL['VisRobY1Val']    = float(VisY1RobEntryField.get())
+  CAL['VisRobX2Val']    = float(VisX2RobEntryField.get())
+  CAL['VisRobY2Val']    = float(VisY2RobEntryField.get())
+  CAL['zoom']           = float(VisZoomSlide.get())
+  CAL['pick180Val']     = int(RUN['pick180'].get()) 
+  CAL['pickClosestVal'] = int(RUN['pickClosest'].get())
+  CAL['curCam']         = str(visoptions.get())
+  CAL['fullRotVal']     = int(RUN['fullRot'].get())
+  CAL['autoBGVal']      = int(RUN['autoBG'].get())
+  
+
+
+
 
   # Checkboxes directly manipulate CAL variable and don't need to be sync'd
 
@@ -9600,7 +9976,7 @@ def ErrorHandler(response):
     cmdRecEntryField.delete(0, 'end')
     cmdRecEntryField.insert(0,response)            
     alarm_message = "Axis Limit Error - See Log"
-    #Progstop()
+    #stopProg()
 
   ##COLLISION ERROR   
   elif (response[1:2] == 'C'):
@@ -9650,7 +10026,15 @@ def ErrorHandler(response):
     stopProg()
     message = "Estop Button was Pressed"
     messages.append(message)
-    alarm_message = message    
+    alarm_message = message
+
+  ##UPDATE PARAMS ERROR   
+  elif (response[1:2] == 'U'):
+    RUN['estopActive'] = TRUE
+    stopProg()
+    message = "Error Updating Firmware Paramaters"
+    messages.append(message)
+    alarm_message = message        
 
   ##CALIBRATION ERROR 
   elif (response[1:2] == 'A'):  
@@ -9673,7 +10057,8 @@ def ErrorHandler(response):
     if (response[2:3] == '9'):
       messages.append("J9 CALIBRATION ERROR")
 
-    alarm_message = "Calibration Error - See Log"             
+    alarm_message = "Calibration Error - See Log"
+    stopProg()              
      
   ##MODBUS ERROR   
   elif (response == 'Modbus Error'):
@@ -9758,30 +10143,26 @@ def show_frame():
         live_lbl.after(10, show_frame)
 
 def start_vid():
+    #global cam_on, cap
+    #global cap
     stop_vid()
     RUN['cam_on'] = True
-    curVisStingSel = visoptions.get()
-    logger.debug(f"start_vid.curVisStingSel: {curVisStingSel}")
-    logger.debug(f"start_vid.camList: {camList}")
-
-    #OS Enumeration order isn't reliable on Linux, use the detected device ID instead
-    match CE['Platform']['OS']:
-      case "Windows":
-        l = len(camList)
-        for i in range(l):
-          if (visoptions.get() == camList[i]):
-            logger.debug(f"Selected Camera detected on list index: {i}")
-            RUN['selectedCam'] = i
-      case "Linux":
-        RUN['selectedCam'] = camMap.get(visoptions.get())
-
-    RUN['cap'] = cv2.VideoCapture(RUN['selectedCam'])
+    curVisStringSel = visoptions.get()
+    for i in range(len(camList)):
+      if curVisStringSel == camList[i]:
+          RUN['selectedCam'] = i
+          break
+    #RUN['cap'] = cv2.VideoCapture(RUN['selectedCam']) 
+    RUN['cap'] = cv2.VideoCapture(RUN['selectedCam'], cv2.CAP_DSHOW)
+    for _ in range(5):
+      RUN['cap'].read()
     show_frame()
 
 
 
 
 def stop_vid():
+    #global cam_on
     RUN['cam_on'] = False
     
     if RUN['cap']:
@@ -9790,114 +10171,112 @@ def stop_vid():
 #vismenu.size
 
 def take_pic():
-  
-  if(RUN['cam_on']):
-    ret, frame = RUN['cap'].read()
-  else:
-    curVisStingSel = visoptions.get()
+  # global RUN['selectedCam']
+  #global cap
+  # global RUN['BGavg']
+  # global RUN['mX1']
+  # global RUN['mY1']
+  # global RUN['mX2']
+  # global RUN['mY2']
 
+  try:
+    if(RUN['cam_on']):
+      ret, frame = RUN['cap'].read()
+    else:
+      curVisStingSel = visoptions.get()
+      l = len(camList)
+      for i in range(l):
+        if (visoptions.get() == camList[i]):
+          RUN['selectedCam'] = i
+      RUN['cap'] = cv2.VideoCapture(RUN['selectedCam']) 
+      ret, frame = RUN['cap'].read()
 
-    #OS Enumeration order isn't reliable on Linux, use the detected device ID instead
-    match CE['Platform']['OS']:
-      case "Windows":
-        l = len(camList)
-        for i in range(l):
-          if (visoptions.get() == camList[i]):
-            logger.debug(f"Selected Camera detected on list index: {i}")
-            RUN['selectedCam'] = i
-      case "Linux":
-        RUN['selectedCam'] = camMap.get(visoptions.get())
+    brightness = int(VisBrightSlide.get())
+    contrast = int(VisContrastSlide.get())
+    CAL['zoom'] = int(VisZoomSlide.get())
 
-    RUN['cap'] = cv2.VideoCapture(RUN['selectedCam']) 
-    ret, frame = RUN['cap'].read()
+    frame = np.int16(frame)
+    frame = frame * (contrast/127+1) - contrast + brightness
+    frame = np.clip(frame, 0, 255)
+    frame = np.uint8(frame) 
+    cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) 
+    
 
-  brightness = int(VisBrightSlide.get())
-  contrast = int(VisContrastSlide.get())
-  CAL['zoom'] = int(VisZoomSlide.get())
+    #get the webcam size
+    height, width = cv2image.shape
 
-  frame = np.int16(frame)
-  frame = frame * (contrast/127+1) - contrast + brightness
-  frame = np.clip(frame, 0, 255)
-  frame = np.uint8(frame) 
-  cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) 
-  
+    #prepare the crop
+    centerX,centerY=int(height/2),int(width/2)
+    radiusX,radiusY= int(CAL['zoom']*height/100),int(CAL['zoom']*width/100)
 
-  #get the webcam size
-  height, width = cv2image.shape
+    minX,maxX=centerX-radiusX,centerX+radiusX
+    minY,maxY=centerY-radiusY,centerY+radiusY
 
-  #prepare the crop
-  centerX,centerY=int(height/2),int(width/2)
-  radiusX,radiusY= int(CAL['zoom']*height/100),int(CAL['zoom']*width/100)
+    cropped = cv2image[minX:maxX, minY:maxY]
+    cv2image = cv2.resize(cropped, (width, height))
 
-  minX,maxX=centerX-radiusX,centerX+radiusX
-  minY,maxY=centerY-radiusY,centerY+radiusY
+    CAL['autoBGVal'] = int(RUN['autoBG'].get())
+    if(CAL['autoBGVal']==1):
+      x1 = int(float(VisX1PixEntryField.get()))
+      y1 = int(float(VisY1PixEntryField.get()))
+      x2 = int(float(VisX2PixEntryField.get()))
+      y2 = int(float(VisY1PixEntryField.get()))
+      x3 = int(float(VisX1PixEntryField.get()))
+      y3 = int(float(VisY2PixEntryField.get()))
+      BG1 = cv2image[x1][y1]
+      BG2 = cv2image[x2][y2]
+      BG3 = cv2image[x3][y3]
+      avg = int(mean([BG1,BG2,BG3]))
+      RUN['BGavg'] = (avg,avg,avg) 
+      background = avg
+      VisBacColorEntryField.configure(state='enabled')  
+      VisBacColorEntryField.delete(0, 'end')
+      VisBacColorEntryField.insert(0,str(RUN['BGavg']))
+      VisBacColorEntryField.configure(state='disabled')  
+    else:
+      temp = VisBacColorEntryField.get()  
+      startIndex = temp.find("(")
+      endIndex = temp.find(",")
+      background = int(temp[startIndex+1:endIndex])
+      #background = eval(VisBacColorEntryField.get())
 
-  cropped = cv2image[minX:maxX, minY:maxY]
-  cv2image = cv2.resize(cropped, (width, height))
+    h = cv2image.shape[0]
+    w = cv2image.shape[1]
+    # loop over the image
+    for y in range(0, h):
+      for x in range(0, w):
+        # change the pixel
+        cv2image[y, x] = background if x >= RUN['mX2'] or x <= RUN['mX1'] or y <= RUN['mY1'] or y >= RUN['mY2'] else cv2image[y, x]  
 
-  CAL['autoBGVal'] = int(RUN['autoBG'].get())
-  if(CAL['autoBGVal']==1):
-    BG1 = cv2image[int(VisX1PixEntryField.get())][int(VisY1PixEntryField.get())]
-    BG2 = cv2image[int(VisX1PixEntryField.get())][int(VisY2PixEntryField.get())]
-    BG3 = cv2image[int(VisX2PixEntryField.get())][int(VisY2PixEntryField.get())]
-    avg = int(mean([BG1,BG2,BG3]))
-    RUN['BGavg'] = (avg,avg,avg) 
-    background = avg
-    VisBacColorEntryField.configure(state='enabled')  
-    VisBacColorEntryField.delete(0, 'end')
-    VisBacColorEntryField.insert(0,str(RUN['BGavg']))
-    VisBacColorEntryField.configure(state='disabled')  
-  else:
-    temp = VisBacColorEntryField.get()  
-    startIndex = temp.find("(")
-    endIndex = temp.find(",")
-    background = int(temp[startIndex+1:endIndex])
-    #background = eval(VisBacColorEntryField.get())
+    img = Image.fromarray(cv2image).resize((640,480))
 
-  h = cv2image.shape[0]
-  w = cv2image.shape[1]
-  # loop over the image
-  for y in range(0, h):
-    for x in range(0, w):
-      # change the pixel
-      cv2image[y, x] = background if x >= RUN['mX2'] or x <= RUN['mX1'] or y <= RUN['mY1'] or y >= RUN['mY2'] else cv2image[y, x]  
+    
 
-  img = Image.fromarray(cv2image).resize((640,480))
-
-  
-
-  imgtk = ImageTk.PhotoImage(image=img) 
-  vid_lbl.imgtk = imgtk    
-  vid_lbl.configure(image=imgtk)
-  temp_dir = os.path.dirname(os.path.abspath(__file__))
-  temp_file = os.path.join(temp_dir, "curImage.jpg")
-
-  #filename = 'curImage.jpg'
-  cv2.imwrite(temp_file, cv2image)
-
-  #If cam was off before, turn it back off
-  if not RUN['cam_on']:
-    RUN['cap'].release()
-
+    imgtk = ImageTk.PhotoImage(image=img) 
+    vid_lbl.imgtk = imgtk    
+    vid_lbl.configure(image=imgtk) 
+    filename = 'curImage.jpg'
+    cv2.imwrite(filename, cv2image)
+  except:
+    print("camera failed")
 
 def mask_pic():
+  # global RUN['selectedCam']
+  #global cap
+  # global RUN['BGavg']
+  # global RUN['mX1']
+  # global RUN['mY1']
+  # global RUN['mX2']
+  # global RUN['mY2']
+
   if(RUN['cam_on']):
     ret, frame = RUN['cap'].read()
   else:
     curVisStingSel = visoptions.get()
-
-    #OS Enumeration order isn't reliable on Linux, use the detected device ID instead
-    match CE['Platform']['OS']:
-      case "Windows":
-        l = len(camList)
-        for i in range(l):
-          if (visoptions.get() == camList[i]):
-            logger.debug(f"Selected Camera detected on list index: {i}")
-            RUN['selectedCam'] = i
-      case "Linux":
-        RUN['selectedCam'] = camMap.get(visoptions.get())
-
-
+    l = len(camList)
+    for i in range(l):
+      if (visoptions.get() == camList[i]):
+        RUN['selectedCam'] = i
     RUN['cap'] = cv2.VideoCapture(RUN['selectedCam']) 
     ret, frame = RUN['cap'].read()
   brightness = int(VisBrightSlide.get())
@@ -9920,18 +10299,25 @@ def mask_pic():
   #img = Image.fromarray(cv2image).resize((640,480))
   #imgtk = ImageTk.PhotoImage(image=img) 
   #vid_lbl.imgtk = imgtk    
-  #vid_lbl.configure(image=imgtk)
-  temp_dir = os.path.dirname(os.path.abspath(__file__))
-  temp_file = os.path.join(temp_dir, "curImage.jpg")
-
-  #filename = 'curImage.jpg'
-  cv2.imwrite(temp_file, cv2image)
+  #vid_lbl.configure(image=imgtk) 
+  filename = 'curImage.jpg'
+  cv2.imwrite(filename, cv2image)
 
   
 
 
 
 def mask_crop(event, x, y, flags, param):
+    # global RUN['x_start'], RUN['y_start'], RUN['x_end'], RUN['y_end'], RUN['cropping']
+    #global oriImage
+    # global RUN['box_points']
+    # global RUN['button_down']
+    # global RUN['mX1']
+    # global RUN['mY1']
+    # global RUN['mX2']
+    # global RUN['mY2']
+
+
     cropDone = False
     
 
@@ -9991,26 +10377,21 @@ def mask_crop(event, x, y, flags, param):
         img = Image.fromarray(RUN['oriImage'])
         imgtk = ImageTk.PhotoImage(image=img) 
         vid_lbl.imgtk = imgtk    
-        vid_lbl.configure(image=imgtk)
-
-        temp_dir = os.path.dirname(os.path.abspath(__file__))
-        temp_file = os.path.join(temp_dir, "curImage.jpg")
-        #filename = 'curImage.jpg'
-        cv2.imwrite(temp_file, RUN['oriImage'])
+        vid_lbl.configure(image=imgtk) 
+        filename = 'curImage.jpg'
+        cv2.imwrite(filename, RUN['oriImage'])
         cv2.destroyAllWindows()
 
 
 
 def selectMask():
+  #global oriImage
+  # global RUN['button_down']
   RUN['button_down'] = False
   RUN['x_start'], RUN['y_start'], RUN['x_end'], RUN['y_end'] = 0, 0, 0, 0
   mask_pic()
-  temp_dir = os.path.dirname(os.path.abspath(__file__))
-  temp_file = os.path.join(temp_dir, "curImage.jpg")
-  image = cv2.imread(temp_file)
-  if image is None:
-    logger.error(f"Error reading file: {temp_file}")
-    return
+
+  image = cv2.imread('curImage.jpg')
   RUN['oriImage'] = image.copy()
   
   cv2.namedWindow("image")
@@ -10020,8 +10401,14 @@ def selectMask():
 
 
 def mouse_crop(event, x, y, flags, param):
+    # global RUN['x_start'], RUN['y_start'], RUN['x_end'], RUN['y_end'], RUN['cropping']
+    #global oriImage
+    # global RUN['box_points']
+    # global RUN['button_down']
+
     cropDone = False
     
+
     if (not RUN['button_down']) and (event == cv2.EVENT_LBUTTONDOWN):
         RUN['x_start'], RUN['y_start'], RUN['x_end'], RUN['y_end'] = x, y, x, y
         RUN['cropping'] = True
@@ -10052,8 +10439,7 @@ def mouse_crop(event, x, y, flags, param):
         if len(refPoint) == 2: #when two points were found
             roi = RUN['oriImage'][refPoint[0][1]:refPoint[1][1], refPoint[0][0]:refPoint[1][0]]
             
-            #cv2.imshow("Cropped", roi)
-            cv2.imshow("image", roi)
+            cv2.imshow("Cropped", roi)
             USER_INP = simpledialog.askstring(title="Teach Vision Object",
                                   prompt="Save Object As:")
             templateName = USER_INP+".jpg"                      
@@ -10064,41 +10450,25 @@ def mouse_crop(event, x, y, flags, param):
 
 
 def selectTemplate():
-  '''
-  Beginning of workflow for Teach Object
-  '''
+  #global oriImage
+  # global RUN['button_down']
   RUN['button_down'] = False
   RUN['x_start'], RUN['y_start'], RUN['x_end'], RUN['y_end'] = 0, 0, 0, 0
-  temp_dir = os.path.dirname(os.path.abspath(__file__))
-  temp_file = os.path.join(temp_dir, "curImage.jpg")
-
-  image = None
-  logger.debug(f"Opening temp file: {temp_file}")
-  image = cv2.imread(temp_file)
-
+  image = cv2.imread('curImage.jpg')
   RUN['oriImage'] = image.copy()
   
-  #cv2.namedWindow("image")
-  #cv2.setMouseCallback("image", mouse_crop)
-  #cv2.imshow("image", image)
-
-  cv2.namedWindow("image", cv2.WINDOW_NORMAL)  # optional but helps on Linux
+  cv2.namedWindow("image")
   cv2.setMouseCallback("image", mouse_crop)
   cv2.imshow("image", image)
-  cv2.waitKey(0)  # <- required to process events and actually paint
-  #cv2.destroyAllWindows()
 
 
 
 
 def snapFind():
+  # global RUN['selectedTemplate']
+  # global RUN['BGavg']
   take_pic()
-  # This was always "" assuming curImage is what is wanted here
-  #template = RUN['selectedTemplate'].get()
-  temp_dir = os.path.dirname(os.path.abspath(__file__))
-  temp_file = os.path.join(temp_dir, "curImage.jpg")  
-  template = temp_file
-
+  template = RUN['selectedTemplate'].get()
   min_score = float(VisScoreEntryField.get())*.01
   CAL['autoBGVal'] = int(RUN['autoBG'].get())
   if(CAL['autoBGVal']==1):
@@ -10121,6 +10491,10 @@ def rotate_image(img,angle,background):
     return result
 
 def visFind(template,min_score,background):
+    # global RUN['xMMpos']
+    # global RUN['yMMpos']
+    #global autoBG
+
     if(background == "Auto"):
       background = RUN['BGavg']
       VisBacColorEntryField.configure(state='enabled')  
@@ -10128,22 +10502,15 @@ def visFind(template,min_score,background):
       VisBacColorEntryField.insert(0,str(RUN['BGavg']))
       VisBacColorEntryField.configure(state='disabled')  
       
+
     green = (0,255,0)
     red = (255,0,0)
     blue = (0,0,255)
     dkgreen = (0,128,0)
     status = "fail"
     highscore = 0
-    temp_dir = os.path.dirname(os.path.abspath(__file__))
-    temp_file = os.path.join(temp_dir, "curImage.jpg")
-    img1 = cv2.imread(temp_file)  # target Image
-    if img1 is None:
-      logger.error(f"Error opening file: {temp_file}")
-      return
+    img1 = cv2.imread('curImage.jpg')  # target Image
     img2 = cv2.imread(template)  # target Image
-    if img2 is None:
-      logger.error(f"Error opening file: {template}")
-      return
     
     #method = cv2.TM_CCOEFF_NORMED
     #method = cv2.TM_CCORR_NORMED
@@ -10436,7 +10803,8 @@ def visFind(template,min_score,background):
 
 
 def updateVisOp():
-  #RUN['selectedTemplate'] = StringVar()
+  # global RUN['selectedTemplate']
+  RUN['selectedTemplate'] = StringVar()
   if getattr(sys, 'frozen', False):
     folder = os.path.dirname(sys.executable)
   elif __file__:
@@ -10447,31 +10815,46 @@ def updateVisOp():
   Visoptmenu.place(x=390, y=52)
   Visoptmenu.bind("<<ComboboxSelected>>", VisOpUpdate)
 
+
+
+
 def VisOpUpdate(foo):
-  # global RUN['selectedTemplate']
-  file = RUN['selectedTemplate'].get()
-  logger.info(f"{file} selected as template file")
-  img = cv2.imread(file, cv2.IMREAD_COLOR)
-  if img is None:
-    logger.error(f"Error reading file: {file}")
-    return
-  img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  
+    file = RUN['selectedTemplate'].get()
+    logger.info(file)
 
+    # Load image
+    img = cv2.imread(file, cv2.IMREAD_COLOR)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-  TARGET_PIXEL_AREA = 22500
+    # --- Square preview settings ---
+    TARGET_SIZE = 150   # final image will be 150x150
 
-  ratio = float(img.shape[1]) / float(img.shape[0])
-  new_h = int(math.sqrt(TARGET_PIXEL_AREA / ratio) + 0.5)
-  new_w = int((new_h * ratio) + 0.5)
+    h, w = img.shape[:2]
 
-  img = cv2.resize(img, (new_w,new_h))
+    # Scale so the longest side fits TARGET_SIZE
+    scale = TARGET_SIZE / max(w, h)
+    new_w = int(w * scale)
+    new_h = int(h * scale)
 
+    img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
+    # Create square canvas (background color can be changed)
+    square = np.zeros((TARGET_SIZE, TARGET_SIZE, 3), dtype=np.uint8)
+    # Example gray background instead of black:
+    # square[:] = (40, 40, 40)
 
-  img = Image.fromarray(img)
-  imgtk = ImageTk.PhotoImage(image=img)        
-  template_lbl.imgtk = imgtk    
-  template_lbl.configure(image=imgtk) 
+    # Center the resized image
+    x = (TARGET_SIZE - new_w) // 2
+    y = (TARGET_SIZE - new_h) // 2
+    square[y:y+new_h, x:x+new_w] = img
+
+    # Convert to Tk image
+    img = Image.fromarray(square)
+    imgtk = ImageTk.PhotoImage(image=img)
+
+    template_lbl.imgtk = imgtk
+    template_lbl.configure(image=imgtk, anchor='center')
+
 
 
 def zeroBrCn():
@@ -10622,10 +11005,10 @@ def GCstepFwd():
     GCselRow = tab7.gcodeView.curselection()[0]
     last = tab7.gcodeView.index('end')
     for row in range (0,GCselRow):
-      tab7.gcodeView.itemconfig(row, {'fg': 'dodger blue'})
-    tab7.gcodeView.itemconfig(GCselRow, {'fg': 'blue2'})
+      tab7.gcodeView.itemconfig(row, {'fg': "#1E90FF"})
+    tab7.gcodeView.itemconfig(GCselRow, {'fg': "#0057A6"})
     for row in range (GCselRow+1,last):
-      tab7.gcodeView.itemconfig(row, {'fg': 'gray'})
+      tab7.gcodeView.itemconfig(row, {'fg': "#959697"})
     tab7.gcodeView.selection_clear(0, END)
     GCselRow += 1
     tab7.gcodeView.select_set(GCselRow)
@@ -10728,7 +11111,7 @@ def GCconvertProg():
     response = str(RUN['ser'].readline().strip(),'utf-8')  
     last = tab7.gcodeView.index('end')
     for row in range (0,last):
-      tab7.gcodeView.itemconfig(row, {'fg': 'black'})
+      tab7.gcodeView.itemconfig(row, {'fg': "#000000"})
     def GCthreadProg():
       # global RUN['GCrowinproc']
       # global RUN['GCstopQueue']
@@ -10763,7 +11146,7 @@ def GCconvertProg():
         #last = tab7.gcodeView.index('end')
         #for row in range (0,GCselRow):
         #  tab7.gcodeView.itemconfig(row, {'fg': 'dodger blue'})
-        tab7.gcodeView.itemconfig(GCselRow, {'fg': 'blue2'})
+        tab7.gcodeView.itemconfig(GCselRow, {'fg': "#0057A6"})
         #for row in range (GCselRow+1,last):
         #  tab7.gcodeView.itemconfig(row, {'fg': 'black'})
         tab7.gcodeView.selection_clear(0, END)
@@ -10877,13 +11260,15 @@ def GCexecuteRow():
       Filename = GcodeFilenameField.get() + ".txt"
       command = "WC"+"X"+RUN['xVal']+"Y"+RUN['yVal']+"Z"+RUN['zVal']+"Rz"+rzVal+"Ry"+ryVal+"Rx"+rxVal+"J7"+J7Val+"J8"+J8Val+"J9"+J9Val+speedPrefix+Speed+"Ac"+ACCspd+"Dc"+DECspd+"Rm"+ACCramp+"W"+RUN['WC']+"Lm"+LoopMode+"Fn"+Filename+"\n"
       cmdSentEntryField.delete(0, 'end') 
-
+      
+      print(str(command))
 
       cmdSentEntryField.insert(0,command)
       RUN['ser'].write(command.encode())
       RUN['ser'].flushInput()
       time.sleep(.1)
       response = str(RUN['ser'].readline().strip(),'utf-8')
+      print(str(response))
       if (response[:1] == 'E'):
         ErrorHandler(response)
         GCstopProg()
@@ -10899,19 +11284,19 @@ def GCexecuteRow():
       if("X" in command):
         xtemp=command[command.find("X")+1:]     
         RUN['xVal'] =xtemp[:xtemp.find(" ")]
-        RUN['xVal'] =str(round(float(xVal),3))
+        RUN['xVal'] =str(round(float(RUN['xVal']),3))
       else:
         RUN['xVal'] =""  
       if("Y" in command):
         ytemp=command[command.find("Y")+1:]     
         RUN['yVal'] =ytemp[:ytemp.find(" ")]
-        RUN['yVal'] =str(round(float(yVal),3))
+        RUN['yVal'] =str(round(float(RUN['yVal']),3))
       else:
         RUN['yVal'] =""
       if("Z" in command):
         ztemp=command[command.find("Z")+1:]     
         RUN['zVal'] =ztemp[:ztemp.find(" ")]
-        RUN['zVal'] =str(round(float(zVal),3))
+        RUN['zVal'] =str(round(float(RUN['zVal']),3))
       else:
         RUN['zVal'] =""
       if("A" in command):
@@ -10950,7 +11335,7 @@ def GCexecuteRow():
       if(RUN['xVal'] != ""):
         if(RUN['inchTrue']):
           RUN['xVal'] =str(float(xVal)*25.4)
-        RUN['xVal'] = str(round((float(GC_ST_E1_EntryField.get())+float(xVal)),3))
+        RUN['xVal'] = str(round((float(GC_ST_E1_EntryField.get())+float(RUN['xVal'])),3))
       else:
         try:
           if(RUN['prevxVal'] != 0):
@@ -10964,7 +11349,7 @@ def GCexecuteRow():
       if(RUN['yVal'] != ""):
         if(RUN['inchTrue']):
           RUN['yVal'] =str(float(yVal)*25.4)
-        RUN['yVal'] = str(round((float(GC_ST_E2_EntryField.get())+float(yVal)),3))
+        RUN['yVal'] = str(round((float(GC_ST_E2_EntryField.get())+float(RUN['yVal'])),3))
       else:
         try:
           if(RUN['prevyVal'] != 0):
@@ -10977,7 +11362,7 @@ def GCexecuteRow():
       if(RUN['zVal'] != ""):
         if(RUN['inchTrue']):
           RUN['zVal'] =str(float(zVal)*25.4)
-        RUN['zVal'] = str(round((float(GC_ST_E3_EntryField.get())+float(zVal)),3))
+        RUN['zVal'] = str(round((float(GC_ST_E3_EntryField.get())+float(RUN['zVal'])),3))
       else:
         try:
           if(RUN['prevzVal'] != 0):
@@ -11274,7 +11659,7 @@ posFrame.grid(row=7, column=0, columnspan=2, sticky="new", padx=5, pady=(2, 5))
 
 posFrame.grid_columnconfigure(0, weight=1)
 
-moveSelMenu = OptionMenu(posFrame, options, "Move J", "Move J", "OFF J", "Move L", "Move R", "Move A Mid", "Move A End", "Move C Center", "Move C Start", "Move C Plane", "Start Spline", "End Spline", "Move PR", "OFF PR ", "Teach PR", "Move Vis", command=posRegFieldVisible)
+moveSelMenu = OptionMenu(posFrame, options, "Move J", "Move J", "Move L", "Move R", "OFF J", "Move PR", "OFF PR ", "Teach PR", "Move A Mid", "Move A End", "Move C Center", "Move C Start", "Move C Plane", "Start Spline", "End Spline", "Move Vis", command=posRegFieldVisible)
 moveSelMenu.grid(row=0, column=0, sticky="ew", padx=2, pady=2)
 
 # Position Register Entry Field (hidden by default, shown when PR moves selected)
@@ -11291,12 +11676,9 @@ modPosBut.grid(row=3, column=0, sticky="ew", padx=2, pady=2)
 deleteBut = ttk.Button(posFrame, text="Delete", command=deleteitem)
 deleteBut.grid(row=4, column=0, sticky="ew", padx=2, pady=2)
 
-returnBut = ttk.Button(posFrame, text="Return", command=insertReturn)
-returnBut.grid(row=5, column=0, sticky="ew", padx=2, pady=2)
-
 autoCalBut = ttk.Button(posFrame, text="Auto Calibrate CMD", command=insCalibrate)
 CalibrateBut = autoCalBut  # Alias for compatibility
-autoCalBut.grid(row=6, column=0, sticky="ew", padx=2, pady=2)
+autoCalBut.grid(row=5, column=0, sticky="ew", padx=2, pady=2)
 
 # Row 8: Vision container
 visionFrame = LabelFrame(leftPanel, text="Vision", padding=5)
@@ -11336,7 +11718,7 @@ VisBacColorEntryField.insert(0, "116, 116, 116")  # Default background color
 VisScoreEntryField.insert(0, "85")  # Default score threshold
 
 # Row 9: Wait container
-waitContainer = LabelFrame(leftPanel, text="Wait", padding=5)
+waitContainer = LabelFrame(leftPanel, text="Wait - Stop", padding=5)
 waitContainer.grid(row=9, column=0, columnspan=2, sticky="ew", padx=5, pady=(2, 5))
 
 waitContainer.grid_columnconfigure(0, weight=1)
@@ -11347,6 +11729,9 @@ waitSecBut.grid(row=0, column=0, sticky="ew", padx=2, pady=2)
 
 waitSecField = Entry(waitContainer, width=8, justify="center")
 waitSecField.grid(row=0, column=1, sticky="w", padx=2, pady=2)
+
+stopBut = ttk.Button(waitContainer, text="Stop", command=insertStop)
+stopBut.grid(row=1, column=0, sticky="ew", padx=2, pady=2)
 
 # ============================================================================
 # CENTER PANEL - Program Display and Controls
@@ -11437,16 +11822,16 @@ manEntryField = Entry(manEntryFrame, width=60)
 manEntryField.grid(row=0, column=0, columnspan=5, sticky="ew", padx=2, pady=(2, 5))
 
 # Five buttons below entry field (equal width)
-getSelBut = ttk.Button(manEntryFrame, text="Get Selected", command=getSel)
+getSelBut = ttk.Button(manEntryFrame, text="Copy", command=getSel)
 getSelBut.grid(row=1, column=0, sticky="ew", padx=2, pady=2)
 
-insertBut = ttk.Button(manEntryFrame, text="Insert", command=manInsItem)
+insertBut = ttk.Button(manEntryFrame, text="Paste", command=manInsItem)
 insertBut.grid(row=1, column=1, sticky="ew", padx=2, pady=2)
 
 replaceBut = ttk.Button(manEntryFrame, text="Replace", command=manReplItem)
 replaceBut.grid(row=1, column=2, sticky="ew", padx=2, pady=2)
 
-openTextBut = ttk.Button(manEntryFrame, text="Open Text", command=openText)
+openTextBut = ttk.Button(manEntryFrame, text="Open .txt File", command=openText)
 openTextBut.grid(row=1, column=3, sticky="ew", padx=2, pady=2)
 
 reloadBut = ttk.Button(manEntryFrame, text="Reload", command=reloadProg)
@@ -12492,13 +12877,12 @@ tab2.grid_rowconfigure(2, weight=0)  # Commands and Save row
 
 tab2.grid_columnconfigure(0, weight=0, minsize=180)  # Communication
 tab2.grid_columnconfigure(1, weight=0, minsize=180)  # Robot Calibration
-tab2.grid_columnconfigure(2, weight=0, minsize=150)  # Calibration Offsets
-tab2.grid_columnconfigure(3, weight=0, minsize=150)  # Encoder Control
-tab2.grid_columnconfigure(4, weight=0, minsize=180)  # External Axes
-tab2.grid_columnconfigure(5, weight=0, minsize=150)  # Theme
-tab2.grid_columnconfigure(6, weight=0, minsize=180)  # Virtual Import
-tab2.grid_columnconfigure(7, weight=0, minsize=120)  # Save
-tab2.grid_columnconfigure(8, weight=1)  # Spacer (expands)
+tab2.grid_columnconfigure(2, weight=0, minsize=180)  # Calibration Offsets
+tab2.grid_columnconfigure(3, weight=0, minsize=180)  # Encoder Control
+tab2.grid_columnconfigure(4, weight=0, minsize=180)  # Theme
+tab2.grid_columnconfigure(5, weight=0, minsize=180)  # Virtual Import
+tab2.grid_columnconfigure(6, weight=0, minsize=180)  # Save
+tab2.grid_columnconfigure(7, weight=1)  # Spacer (expands)
 
 # ============================================================================
 # ROW 0: Status/Alarm Label (spans all columns)
@@ -12794,7 +13178,7 @@ main_color_var = tk.StringVar(value="Royal Blue")
 # ROW 1, COLUMN 5: Theme Frame
 # ============================================================================
 themeFrame = LabelFrame(tab2, text="Theme", padding=10)
-themeFrame.grid(row=1, column=5, sticky="nsew", padx=5, pady=5)
+themeFrame.grid(row=1, column=4, sticky="nsew", padx=5, pady=5)
 
 themeFrame.grid_columnconfigure(0, weight=1)
 themeFrame.grid_columnconfigure(1, weight=1)
@@ -12816,105 +13200,14 @@ main_color_dropdown.grid(row=2, column=0, columnspan=2, sticky="ew", padx=2, pad
 
 
 
-# ============================================================================
-# ROW 1, COLUMN 4: External Axes Frame
-# ============================================================================
-externalAxesFrame = LabelFrame(tab2, text="External Axes", padding=10)
-externalAxesFrame.grid(row=1, column=4, sticky="nsew", padx=5, pady=5)
 
-externalAxesFrame.grid_columnconfigure(0, weight=0)  # Labels
-externalAxesFrame.grid_columnconfigure(1, weight=1)  # Entry fields
-
-# --- 7th Axis Calibration ---
-axis7Lab = Label(externalAxesFrame, font=("Arial 10 bold"), text="7th Axis Calibration")
-axis7Lab.grid(row=0, column=0, columnspan=2, sticky="w", padx=5, pady=(5, 10))
-
-axis7lengthLab = Label(externalAxesFrame, text="7th Axis Length:")
-axis7lengthLab.grid(row=1, column=0, sticky="e", padx=5, pady=2)
-axis7lengthEntryField = Entry(externalAxesFrame, width=5, justify="center")
-axis7lengthEntryField.grid(row=1, column=1, sticky="w", padx=5, pady=2)
-
-axis7rotLab = Label(externalAxesFrame, text="MM per Rotation:")
-axis7rotLab.grid(row=2, column=0, sticky="e", padx=5, pady=2)
-axis7rotEntryField = Entry(externalAxesFrame, width=5, justify="center")
-axis7rotEntryField.grid(row=2, column=1, sticky="w", padx=5, pady=2)
-
-axis7stepsLab = Label(externalAxesFrame, text="Drive Steps:")
-axis7stepsLab.grid(row=3, column=0, sticky="e", padx=5, pady=2)
-axis7stepsEntryField = Entry(externalAxesFrame, width=5, justify="center")
-axis7stepsEntryField.grid(row=3, column=1, sticky="w", padx=5, pady=2)
-
-J7zerobut = Button(externalAxesFrame, text="Set Axis 7 Calibration to Zero", width=28, command=zeroAxis7)
-J7zerobut.grid(row=4, column=0, columnspan=2, sticky="ew", padx=5, pady=2)
-
-J7calbut = Button(externalAxesFrame, text="Autocalibrate Axis 7", width=28, command=calRobotJ7)
-J7calbut.grid(row=5, column=0, columnspan=2, sticky="ew", padx=5, pady=2)
-
-axis7pinsetLab = Label(externalAxesFrame, font=("Arial", 8), text="StepPin = 12 / DirPin = 13 / CalPin = 36")
-axis7pinsetLab.grid(row=6, column=0, columnspan=2, sticky="w", padx=5, pady=(2, 15))
-
-# --- 8th Axis Calibration ---
-axis8Lab = Label(externalAxesFrame, font=("Arial 10 bold"), text="8th Axis Calibration")
-axis8Lab.grid(row=7, column=0, columnspan=2, sticky="w", padx=5, pady=(5, 10))
-
-axis8lengthLab = Label(externalAxesFrame, text="8th Axis Length:")
-axis8lengthLab.grid(row=8, column=0, sticky="e", padx=5, pady=2)
-axis8lengthEntryField = Entry(externalAxesFrame, width=5, justify="center")
-axis8lengthEntryField.grid(row=8, column=1, sticky="w", padx=5, pady=2)
-
-axis8rotLab = Label(externalAxesFrame, text="MM per Rotation:")
-axis8rotLab.grid(row=9, column=0, sticky="e", padx=5, pady=2)
-axis8rotEntryField = Entry(externalAxesFrame, width=5, justify="center")
-axis8rotEntryField.grid(row=9, column=1, sticky="w", padx=5, pady=2)
-
-axis8stepsLab = Label(externalAxesFrame, text="Drive Steps:")
-axis8stepsLab.grid(row=10, column=0, sticky="e", padx=5, pady=2)
-axis8stepsEntryField = Entry(externalAxesFrame, width=5, justify="center")
-axis8stepsEntryField.grid(row=10, column=1, sticky="w", padx=5, pady=2)
-
-J8zerobut = Button(externalAxesFrame, text="Set Axis 8 Calibration to Zero", width=28, command=zeroAxis8)
-J8zerobut.grid(row=11, column=0, columnspan=2, sticky="ew", padx=5, pady=2)
-
-J8calbut = Button(externalAxesFrame, text="Autocalibrate Axis 8", width=28, command=calRobotJ8)
-J8calbut.grid(row=12, column=0, columnspan=2, sticky="ew", padx=5, pady=2)
-
-axis8pinsetLab = Label(externalAxesFrame, font=("Arial", 8), text="StepPin = 32 / DirPin = 33 / CalPin = 37")
-axis8pinsetLab.grid(row=13, column=0, columnspan=2, sticky="w", padx=5, pady=(2, 15))
-
-# --- 9th Axis Calibration ---
-axis9Lab = Label(externalAxesFrame, font=("Arial 10 bold"), text="9th Axis Calibration")
-axis9Lab.grid(row=14, column=0, columnspan=2, sticky="w", padx=5, pady=(5, 10))
-
-axis9lengthLab = Label(externalAxesFrame, text="9th Axis Length:")
-axis9lengthLab.grid(row=15, column=0, sticky="e", padx=5, pady=2)
-axis9lengthEntryField = Entry(externalAxesFrame, width=5, justify="center")
-axis9lengthEntryField.grid(row=15, column=1, sticky="w", padx=5, pady=2)
-
-axis9rotLab = Label(externalAxesFrame, text="MM per Rotation:")
-axis9rotLab.grid(row=16, column=0, sticky="e", padx=5, pady=2)
-axis9rotEntryField = Entry(externalAxesFrame, width=5, justify="center")
-axis9rotEntryField.grid(row=16, column=1, sticky="w", padx=5, pady=2)
-
-axis9stepsLab = Label(externalAxesFrame, text="Drive Steps:")
-axis9stepsLab.grid(row=17, column=0, sticky="e", padx=5, pady=2)
-axis9stepsEntryField = Entry(externalAxesFrame, width=5, justify="center")
-axis9stepsEntryField.grid(row=17, column=1, sticky="w", padx=5, pady=2)
-
-J9zerobut = Button(externalAxesFrame, text="Set Axis 9 Calibration to Zero", width=28, command=zeroAxis9)
-J9zerobut.grid(row=18, column=0, columnspan=2, sticky="ew", padx=5, pady=2)
-
-J9calbut = Button(externalAxesFrame, text="Autocalibrate Axis 9", width=28, command=calRobotJ9)
-J9calbut.grid(row=19, column=0, columnspan=2, sticky="ew", padx=5, pady=2)
-
-axis9pinsetLab = Label(externalAxesFrame, font=("Arial", 8), text="StepPin = 34 / DirPin = 35 / CalPin = 38")
-axis9pinsetLab.grid(row=20, column=0, columnspan=2, sticky="w", padx=5, pady=(2, 5))
 
 
 # ============================================================================
 # ROW 1, COLUMN 6: Virtual Import Frame
 # ============================================================================
 virtualImportFrame = LabelFrame(tab2, text="Virtual Import", padding=10)
-virtualImportFrame.grid(row=1, column=6, sticky="nsew", padx=5, pady=5)
+virtualImportFrame.grid(row=1, column=5, sticky="nsew", padx=5, pady=5)
 
 virtualImportFrame.grid_columnconfigure(0, weight=1)
 
@@ -12959,15 +13252,17 @@ updatePosBut.grid(row=11, column=0, sticky="ew", padx=5, pady=(10, 5))
 # ============================================================================
 # ROW 2, COLUMN 5: Save Frame (below and right of Commands)
 # ============================================================================
-saveFrame = LabelFrame(tab2, text="Save", padding=10)
-saveFrame.grid(row=2, column=5, columnspan=2, sticky="ew", padx=5, pady=5)
+saveFrame = LabelFrame(tab2, text="Save All", padding=10)
+saveFrame.grid(row=2, column=5, rowspan=1, sticky="nsew", padx=5, pady=5)
 
 saveFrame.grid_columnconfigure(0, weight=1)
-saveFrame.grid_rowconfigure(0, weight=1)  # Center vertically
 
-# Save All button
-saveCalBut = Button(saveFrame, text="SAVE ALL", width=15, command=SaveAndApplyCalibration)
-saveCalBut.grid(row=0, column=0, sticky="", padx=5, pady=5)
+# Save button
+saveCalBut = Button(saveFrame, text="SAVE", width=26, command=SaveAndApplyCalibration)
+saveCalBut.grid(row=0, column=0, padx=5, pady=5)
+
+
+
 
 # ============================================================================
 # ROW 2: Commands Frame (spans all columns)
@@ -12989,7 +13284,11 @@ cmdRecLab.grid(row=2, column=0, sticky="w", padx=5, pady=(10, 2))
 cmdRecEntryField = Entry(cmdFrame, width=120, justify="center")
 cmdRecEntryField.grid(row=3, column=0, sticky="ew", padx=5, pady=2)
 
+
+
+##############################################################################
 ####TAB 3
+##############################################################################
 
 # ============================================================================
 # Tab 3 Grid Layout Configuration
@@ -12997,11 +13296,13 @@ cmdRecEntryField.grid(row=3, column=0, sticky="ew", padx=5, pady=2)
 tab3.grid_rowconfigure(0, weight=1)
 tab3.grid_rowconfigure(1, weight=1)
 tab3.grid_columnconfigure(0, weight=0, minsize=180)  # Motor Dir, Cal Dir
-tab3.grid_columnconfigure(1, weight=0, minsize=180)  # Pos Limits, Steps/Deg
-tab3.grid_columnconfigure(2, weight=0, minsize=220)  # Drive MS, Encoder CPR
-tab3.grid_columnconfigure(3, weight=0, minsize=280)  # DH Parameters, Tool Frame
-tab3.grid_columnconfigure(4, weight=0, minsize=200)  # Defaults
-tab3.grid_columnconfigure(5, weight=1)  # Remaining .place() widgets
+tab3.grid_columnconfigure(1, weight=0, minsize=180)  # Pos Limits, Cal High Low
+tab3.grid_columnconfigure(2, weight=0, minsize=180)  # Drive MS, Steps Deg
+tab3.grid_columnconfigure(3, weight=0, minsize=220)  # DH Parameters, Tool Frame
+tab3.grid_columnconfigure(4, weight=0, minsize=280)  # External Axis Config
+tab3.grid_columnconfigure(5, weight=0, minsize=280)  # Defaults
+tab3.grid_columnconfigure(6, weight=0, minsize=280)  # Save
+tab3.grid_columnconfigure(7, weight=1)  # Remaining .place() widgets
 
 # ============================================================================
 # Motor Direction Frame (Row 0, Column 0)
@@ -13109,6 +13410,62 @@ J9CalDirLab_grid.grid(row=8, column=0, sticky="w", padx=5, pady=2)
 J9CalDirEntryField = Entry(calDirFrame, width=5, justify="center")
 J9CalDirEntryField.grid(row=8, column=1, sticky="w", padx=5, pady=2)
 
+
+# ============================================================================
+# Calibration Switch High | Low (Row 1, Column 1)
+# ============================================================================
+calHLFrame = LabelFrame(tab3, text="Calibration Switch - HIGH/LOW", padding=10)
+calHLFrame.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
+calHLFrame.grid_columnconfigure(0, weight=0)
+calHLFrame.grid_columnconfigure(1, weight=1)
+
+J1CalHighLowLab_grid = Label(calHLFrame, font=("Arial", 8), text="J1 Calibration Switch.")
+J1CalHighLowLab_grid.grid(row=0, column=0, sticky="w", padx=5, pady=2)
+J1CalHighLowEntryField = Entry(calHLFrame, width=6, justify="center")
+J1CalHighLowEntryField.grid(row=0, column=1, sticky="w", padx=5, pady=2)
+
+J2CalHighLowLab_grid = Label(calHLFrame, font=("Arial", 8), text="J2 Calibration Switch")
+J2CalHighLowLab_grid.grid(row=1, column=0, sticky="w", padx=5, pady=2)
+J2CalHighLowEntryField = Entry(calHLFrame, width=6, justify="center")
+J2CalHighLowEntryField.grid(row=1, column=1, sticky="w", padx=5, pady=2)
+
+J3CalHighLowLab_grid = Label(calHLFrame, font=("Arial", 8), text="J3 Calibration Switch")
+J3CalHighLowLab_grid.grid(row=2, column=0, sticky="w", padx=5, pady=2)
+J3CalHighLowEntryField = Entry(calHLFrame, width=6, justify="center")
+J3CalHighLowEntryField.grid(row=2, column=1, sticky="w", padx=5, pady=2)
+
+J4CalHighLowLab_grid = Label(calHLFrame, font=("Arial", 8), text="J4 Calibration Switch")
+J4CalHighLowLab_grid.grid(row=3, column=0, sticky="w", padx=5, pady=2)
+J4CalHighLowEntryField = Entry(calHLFrame, width=6, justify="center")
+J4CalHighLowEntryField.grid(row=3, column=1, sticky="w", padx=5, pady=2)
+
+J5CalHighLowLab_grid = Label(calHLFrame, font=("Arial", 8), text="J5 Calibration Switch")
+J5CalHighLowLab_grid.grid(row=4, column=0, sticky="w", padx=5, pady=2)
+J5CalHighLowEntryField = Entry(calHLFrame, width=6, justify="center")
+J5CalHighLowEntryField.grid(row=4, column=1, sticky="w", padx=5, pady=2)
+
+J6CalHighLowLab_grid = Label(calHLFrame, font=("Arial", 8), text="J6 Calibration Switch")
+J6CalHighLowLab_grid.grid(row=5, column=0, sticky="w", padx=5, pady=2)
+J6CalHighLowEntryField = Entry(calHLFrame, width=6, justify="center")
+J6CalHighLowEntryField.grid(row=5, column=1, sticky="w", padx=5, pady=2)
+
+J7CalHighLowLab_grid = Label(calHLFrame, font=("Arial", 8), text="J7 Calibration Switch")
+J7CalHighLowLab_grid.grid(row=6, column=0, sticky="w", padx=5, pady=2)
+J7CalHighLowEntryField = Entry(calHLFrame, width=6, justify="center")
+J7CalHighLowEntryField.grid(row=6, column=1, sticky="w", padx=5, pady=2)
+
+J8CalHighLowLab_grid = Label(calHLFrame, font=("Arial", 8), text="J8 Calibration Switch")
+J8CalHighLowLab_grid.grid(row=7, column=0, sticky="w", padx=5, pady=2)
+J8CalHighLowEntryField = Entry(calHLFrame, width=6, justify="center")
+J8CalHighLowEntryField.grid(row=7, column=1, sticky="w", padx=5, pady=2)
+
+J9CalHighLowLab_grid = Label(calHLFrame, font=("Arial", 8), text="J9 Calibration Switch")
+J9CalHighLowLab_grid.grid(row=8, column=0, sticky="w", padx=5, pady=2)
+J9CalHighLowEntryField = Entry(calHLFrame, width=6, justify="center")
+J9CalHighLowEntryField.grid(row=8, column=1, sticky="w", padx=5, pady=2)
+
+
+
 # ============================================================================
 # Position Limits Frame (Row 0, Column 1)
 # ============================================================================
@@ -13178,41 +13535,41 @@ J6NegLimEntryField = Entry(posLimFrame, width=5, justify="center")
 J6NegLimEntryField.grid(row=11, column=1, sticky="w", padx=5, pady=2)
 
 # ============================================================================
-# Steps per Degree Frame (Row 1, Column 1)
+# Steps per Degree Frame (Row 1, Column 2)
 # ============================================================================
 stepDegFrame = LabelFrame(tab3, text="Steps per Degree", padding=10)
-stepDegFrame.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
+stepDegFrame.grid(row=1, column=2, sticky="nsew", padx=5, pady=5)
 stepDegFrame.grid_columnconfigure(0, weight=0)
 stepDegFrame.grid_columnconfigure(1, weight=1)
 
 J1StepDegLab_grid = Label(stepDegFrame, font=("Arial", 8), text="J1 Step/Deg")
 J1StepDegLab_grid.grid(row=0, column=0, sticky="w", padx=5, pady=2)
-J1StepDegEntryField = Entry(stepDegFrame, width=5, justify="center")
+J1StepDegEntryField = Entry(stepDegFrame, width=8, justify="center")
 J1StepDegEntryField.grid(row=0, column=1, sticky="w", padx=5, pady=2)
 
 J2StepDegLab_grid = Label(stepDegFrame, font=("Arial", 8), text="J2 Step/Deg")
 J2StepDegLab_grid.grid(row=1, column=0, sticky="w", padx=5, pady=2)
-J2StepDegEntryField = Entry(stepDegFrame, width=5, justify="center")
+J2StepDegEntryField = Entry(stepDegFrame, width=8, justify="center")
 J2StepDegEntryField.grid(row=1, column=1, sticky="w", padx=5, pady=2)
 
 J3StepDegLab_grid = Label(stepDegFrame, font=("Arial", 8), text="J3 Step/Deg")
 J3StepDegLab_grid.grid(row=2, column=0, sticky="w", padx=5, pady=2)
-J3StepDegEntryField = Entry(stepDegFrame, width=5, justify="center")
+J3StepDegEntryField = Entry(stepDegFrame, width=8, justify="center")
 J3StepDegEntryField.grid(row=2, column=1, sticky="w", padx=5, pady=2)
 
 J4StepDegLab_grid = Label(stepDegFrame, font=("Arial", 8), text="J4 Step/Deg")
 J4StepDegLab_grid.grid(row=3, column=0, sticky="w", padx=5, pady=2)
-J4StepDegEntryField = Entry(stepDegFrame, width=5, justify="center")
+J4StepDegEntryField = Entry(stepDegFrame, width=8, justify="center")
 J4StepDegEntryField.grid(row=3, column=1, sticky="w", padx=5, pady=2)
 
 J5StepDegLab_grid = Label(stepDegFrame, font=("Arial", 8), text="J5 Step/Deg")
 J5StepDegLab_grid.grid(row=4, column=0, sticky="w", padx=5, pady=2)
-J5StepDegEntryField = Entry(stepDegFrame, width=5, justify="center")
+J5StepDegEntryField = Entry(stepDegFrame, width=8, justify="center")
 J5StepDegEntryField.grid(row=4, column=1, sticky="w", padx=5, pady=2)
 
 J6StepDegLab_grid = Label(stepDegFrame, font=("Arial", 8), text="J6 Step/Deg")
 J6StepDegLab_grid.grid(row=5, column=0, sticky="w", padx=5, pady=2)
-J6StepDegEntryField = Entry(stepDegFrame, width=5, justify="center")
+J6StepDegEntryField = Entry(stepDegFrame, width=8, justify="center")
 J6StepDegEntryField.grid(row=5, column=1, sticky="w", padx=5, pady=2)
 
 # ============================================================================
@@ -13254,10 +13611,10 @@ J6DriveMSEntryField = Entry(driveMSFrame, width=5, justify="center")
 J6DriveMSEntryField.grid(row=5, column=1, sticky="w", padx=5, pady=2)
 
 # ============================================================================
-# Encoder CPR Frame (Row 1, Column 2)
+# Encoder CPR Frame (Row 1, Column 3)
 # ============================================================================
 encCPRFrame = LabelFrame(tab3, text="Encoder CPR", padding=10)
-encCPRFrame.grid(row=1, column=2, sticky="nsew", padx=5, pady=5)
+encCPRFrame.grid(row=1, column=3, sticky="nsew", padx=5, pady=5)
 encCPRFrame.grid_columnconfigure(0, weight=0)
 encCPRFrame.grid_columnconfigure(1, weight=1)
 
@@ -13377,11 +13734,107 @@ J6dEntryField.grid(row=6, column=3, padx=2, pady=2)
 J6aEntryField = Entry(dhParamsFrame, width=5, justify="center")
 J6aEntryField.grid(row=6, column=4, padx=2, pady=2)
 
+
+
 # ============================================================================
-# Tool Frame Offset Frame (Row 1, Column 3)
+# ROW 1, COLUMN 4: External Axes Frame
+# ============================================================================
+externalAxesFrame = LabelFrame(tab3, text="External Axes", padding=10)
+externalAxesFrame.grid(row=0, column=4, sticky="nsew", padx=5, pady=5)
+
+externalAxesFrame.grid_columnconfigure(0, weight=0)  # Labels
+externalAxesFrame.grid_columnconfigure(1, weight=1)  # Entry fields
+
+# --- 7th Axis Calibration ---
+axis7Lab = Label(externalAxesFrame, font=("Arial 10 bold"), text="7th Axis Calibration")
+axis7Lab.grid(row=0, column=0, columnspan=2, sticky="w", padx=5, pady=(5, 10))
+
+axis7lengthLab = Label(externalAxesFrame, text="7th Axis Length:")
+axis7lengthLab.grid(row=1, column=0, sticky="e", padx=5, pady=2)
+axis7lengthEntryField = Entry(externalAxesFrame, width=5, justify="center")
+axis7lengthEntryField.grid(row=1, column=1, sticky="w", padx=5, pady=2)
+
+axis7rotLab = Label(externalAxesFrame, text="MM per Rotation:")
+axis7rotLab.grid(row=2, column=0, sticky="e", padx=5, pady=2)
+axis7rotEntryField = Entry(externalAxesFrame, width=5, justify="center")
+axis7rotEntryField.grid(row=2, column=1, sticky="w", padx=5, pady=2)
+
+axis7stepsLab = Label(externalAxesFrame, text="Drive Steps:")
+axis7stepsLab.grid(row=3, column=0, sticky="e", padx=5, pady=2)
+axis7stepsEntryField = Entry(externalAxesFrame, width=5, justify="center")
+axis7stepsEntryField.grid(row=3, column=1, sticky="w", padx=5, pady=2)
+
+J7zerobut = Button(externalAxesFrame, text="Set Axis 7 Calibration to Zero", width=28, command=zeroAxis7)
+J7zerobut.grid(row=4, column=0, columnspan=2, sticky="ew", padx=5, pady=2)
+
+J7calbut = Button(externalAxesFrame, text="Autocalibrate Axis 7", width=28, command=calRobotJ7)
+J7calbut.grid(row=5, column=0, columnspan=2, sticky="ew", padx=5, pady=2)
+
+axis7pinsetLab = Label(externalAxesFrame, font=("Arial", 8), text="StepPin = 12 / DirPin = 13 / CalPin = 36")
+axis7pinsetLab.grid(row=6, column=0, columnspan=2, sticky="w", padx=5, pady=(2, 15))
+
+# --- 8th Axis Calibration ---
+axis8Lab = Label(externalAxesFrame, font=("Arial 10 bold"), text="8th Axis Calibration")
+axis8Lab.grid(row=7, column=0, columnspan=2, sticky="w", padx=5, pady=(5, 10))
+
+axis8lengthLab = Label(externalAxesFrame, text="8th Axis Length:")
+axis8lengthLab.grid(row=8, column=0, sticky="e", padx=5, pady=2)
+axis8lengthEntryField = Entry(externalAxesFrame, width=5, justify="center")
+axis8lengthEntryField.grid(row=8, column=1, sticky="w", padx=5, pady=2)
+
+axis8rotLab = Label(externalAxesFrame, text="MM per Rotation:")
+axis8rotLab.grid(row=9, column=0, sticky="e", padx=5, pady=2)
+axis8rotEntryField = Entry(externalAxesFrame, width=5, justify="center")
+axis8rotEntryField.grid(row=9, column=1, sticky="w", padx=5, pady=2)
+
+axis8stepsLab = Label(externalAxesFrame, text="Drive Steps:")
+axis8stepsLab.grid(row=10, column=0, sticky="e", padx=5, pady=2)
+axis8stepsEntryField = Entry(externalAxesFrame, width=5, justify="center")
+axis8stepsEntryField.grid(row=10, column=1, sticky="w", padx=5, pady=2)
+
+J8zerobut = Button(externalAxesFrame, text="Set Axis 8 Calibration to Zero", width=28, command=zeroAxis8)
+J8zerobut.grid(row=11, column=0, columnspan=2, sticky="ew", padx=5, pady=2)
+
+J8calbut = Button(externalAxesFrame, text="Autocalibrate Axis 8", width=28, command=calRobotJ8)
+J8calbut.grid(row=12, column=0, columnspan=2, sticky="ew", padx=5, pady=2)
+
+axis8pinsetLab = Label(externalAxesFrame, font=("Arial", 8), text="StepPin = 32 / DirPin = 33 / CalPin = 37")
+axis8pinsetLab.grid(row=13, column=0, columnspan=2, sticky="w", padx=5, pady=(2, 15))
+
+# --- 9th Axis Calibration ---
+axis9Lab = Label(externalAxesFrame, font=("Arial 10 bold"), text="9th Axis Calibration")
+axis9Lab.grid(row=14, column=0, columnspan=2, sticky="w", padx=5, pady=(5, 10))
+
+axis9lengthLab = Label(externalAxesFrame, text="9th Axis Length:")
+axis9lengthLab.grid(row=15, column=0, sticky="e", padx=5, pady=2)
+axis9lengthEntryField = Entry(externalAxesFrame, width=5, justify="center")
+axis9lengthEntryField.grid(row=15, column=1, sticky="w", padx=5, pady=2)
+
+axis9rotLab = Label(externalAxesFrame, text="MM per Rotation:")
+axis9rotLab.grid(row=16, column=0, sticky="e", padx=5, pady=2)
+axis9rotEntryField = Entry(externalAxesFrame, width=5, justify="center")
+axis9rotEntryField.grid(row=16, column=1, sticky="w", padx=5, pady=2)
+
+axis9stepsLab = Label(externalAxesFrame, text="Drive Steps:")
+axis9stepsLab.grid(row=17, column=0, sticky="e", padx=5, pady=2)
+axis9stepsEntryField = Entry(externalAxesFrame, width=5, justify="center")
+axis9stepsEntryField.grid(row=17, column=1, sticky="w", padx=5, pady=2)
+
+J9zerobut = Button(externalAxesFrame, text="Set Axis 9 Calibration to Zero", width=28, command=zeroAxis9)
+J9zerobut.grid(row=18, column=0, columnspan=2, sticky="ew", padx=5, pady=2)
+
+J9calbut = Button(externalAxesFrame, text="Autocalibrate Axis 9", width=28, command=calRobotJ9)
+J9calbut.grid(row=19, column=0, columnspan=2, sticky="ew", padx=5, pady=2)
+
+axis9pinsetLab = Label(externalAxesFrame, font=("Arial", 8), text="StepPin = 34 / DirPin = 35 / CalPin = 38")
+axis9pinsetLab.grid(row=20, column=0, columnspan=2, sticky="w", padx=5, pady=(2, 5))
+
+
+# ============================================================================
+# Tool Frame Offset Frame (Row 1, Column 4)
 # ============================================================================
 toolFrameFrame = LabelFrame(tab3, text="Tool Frame Offset", padding=10)
-toolFrameFrame.grid(row=1, column=3, sticky="nsew", padx=5, pady=5)
+toolFrameFrame.grid(row=1, column=4, sticky="nsew", padx=5, pady=5)
 
 toolFrameFrame.grid_columnconfigure(0, weight=1)
 toolFrameFrame.grid_columnconfigure(1, weight=1)
@@ -13417,395 +13870,68 @@ DisableWristCbut = Checkbutton(toolFrameFrame, text="Disable Wrist Rotation - Li
 DisableWristCbut.grid(row=2, column=0, columnspan=6, sticky="w", padx=5, pady=5)
 
 # ============================================================================
+# Save Frame (Row 1, Column 5)
+# ============================================================================
+SaveAllFrame = LabelFrame(tab3, text="Save All", padding=10)
+SaveAllFrame.grid(row=1, column=5, rowspan=1, sticky="nsew", padx=5, pady=5)
+
+SaveAllFrame.grid_columnconfigure(0, weight=1)
+
+saveCalBut = Button(SaveAllFrame, text="SAVE", width=26, command=SaveAndApplyCalibration)
+saveCalBut.grid(row=0, column=0, padx=5, pady=5) # 10 pixels above, 30 below
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ============================================================================
 # Defaults Frame (Row 0-1, Column 4)
 # ============================================================================
 defaultsFrame = LabelFrame(tab3, text="Defaults", padding=10)
-defaultsFrame.grid(row=0, column=4, rowspan=2, sticky="nsew", padx=5, pady=5)
+defaultsFrame.grid(row=0, column=5, rowspan=1, sticky="nsew", padx=5, pady=5)
 
 defaultsFrame.grid_columnconfigure(0, weight=1)
 
-loadAR4Mk2But = Button(defaultsFrame, text="Load AR4-MK3 Defaults", width=26, command=LoadAR4Mk3default)
-loadAR4Mk2But.grid(row=0, column=0, padx=5, pady=5)
+loadAR4Mk5But = Button(defaultsFrame, text="Load AR4-MK5 Defaults", width=26, command=LoadAR4Mk5default)
+loadAR4Mk5But.grid(row=0, column=0, padx=5, pady=5)
+
+loadAR4Mk4But = Button(defaultsFrame, text="Load AR4-MK4 Defaults", width=26, command=LoadAR4Mk3default)
+loadAR4Mk4But.grid(row=1, column=0, padx=5, pady=5)
+
+loadAR4Mk3But = Button(defaultsFrame, text="Load AR4-MK3 Defaults", width=26, command=LoadAR4Mk3default)
+loadAR4Mk3But.grid(row=2, column=0, padx=5, pady=5)
 
 loadAR4Mk2But = Button(defaultsFrame, text="Load AR4-MK2 Defaults", width=26, command=LoadAR4Mk2default)
-loadAR4Mk2But.grid(row=1, column=0, padx=5, pady=5)
+loadAR4Mk2But.grid(row=3, column=0, padx=5, pady=5)
 
-loadAR4But = Button(defaultsFrame, text="Load AR4 Defaults", width=26, command=LoadAR4default)
-loadAR4But.grid(row=2, column=0, padx=5, pady=5)
+loadAR4But = Button(defaultsFrame, text="Load AR4-MK1 Defaults", width=26, command=LoadAR4default)
+loadAR4But.grid(row=4, column=0, padx=5, pady=5)
 
 loadAR3But = Button(defaultsFrame, text="Load AR3 Defaults", width=26, command=LoadAR3default)
-loadAR3But.grid(row=3, column=0, padx=5, pady=5)
+loadAR3But.grid(row=5, column=0, padx=5, pady=5)
 
-saveCalBut = Button(defaultsFrame, text="SAVE", width=26, command=SaveAndApplyCalibration)
-saveCalBut.grid(row=4, column=0, padx=5, pady=(10, 30)) # 10 pixels above, 30 below
+
 
 
 loadCustomBut = Button(defaultsFrame, text="Load Custom Calibration", width=26, command=load_custom_calibration)
-loadCustomBut .grid(row=5, column=0, padx=5, pady=(30, 5))
+loadCustomBut .grid(row=7, column=0, padx=5, pady=(30, 5))
 
 saveCustomBut = Button(defaultsFrame, text="Save Custom Calibration", width=26, command=save_custom_calibration)
-saveCustomBut.grid(row=6, column=0, padx=5, pady=5)
+saveCustomBut.grid(row=8, column=0, padx=5, pady=5)
 
-
-
-# #### TOOL FRAME ####
-# ToolFrameLab = Label(tab3, text = "Tool Frame Offset")
-# ToolFrameLab.place(x=970, y=60)
-# 
-# UFxLab = Label(tab3, font=("Arial", 11), text = "X")
-# UFxLab.place(x=920, y=90)
-# 
-# UFyLab = Label(tab3, font=("Arial", 11), text = "Y")
-# UFyLab.place(x=960, y=90)
-# 
-# UFzLab = Label(tab3, font=("Arial", 11), text = "Z")
-# UFzLab.place(x=1000, y=90)
-# 
-# UFRxLab = Label(tab3, font=("Arial", 11), text = "Rz")
-# UFRxLab.place(x=1040, y=90)
-# 
-# UFRyLab = Label(tab3, font=("Arial", 11), text = "Ry")
-# UFRyLab.place(x=1080, y=90)
-# 
-# UFRzLab = Label(tab3, font=("Arial", 11), text = "Rx")
-# UFRzLab.place(x=1120, y=90)
-# 
-# TFxEntryField = Entry(tab3,width=4,justify="center")
-# TFxEntryField.place(x=910, y=115)
-# TFyEntryField = Entry(tab3,width=4,justify="center")
-# TFyEntryField.place(x=950, y=115)
-# TFzEntryField = Entry(tab3,width=4,justify="center")
-# TFzEntryField.place(x=990, y=115)
-# TFrzEntryField = Entry(tab3,width=4,justify="center")
-# TFrzEntryField.place(x=1030, y=115)
-# TFryEntryField = Entry(tab3,width=4,justify="center")
-# TFryEntryField.place(x=1070, y=115)
-# TFrxEntryField = Entry(tab3,width=4,justify="center")
-# TFrxEntryField.place(x=1110, y=115)
-# 
-# DisableWristCbut = Checkbutton(tab3, text="Disable Wrist Rotation - Linear Moves",variable = CAL['DisableWristRotVal'])
-# DisableWristCbut.place(x=910, y=150)
-
-
-# # ####  MOTOR DIRECTIONS ####
-
-# # J1MotDirLab = Label(tab3, font=("Arial", 8), text = "J1 Motor Direction")
-# # J1MotDirLab.place(x=10, y=20)
-# # J2MotDirLab = Label(tab3, font=("Arial", 8), text = "J2 Motor Direction")
-# # J2MotDirLab.place(x=10, y=45)
-# # J3MotDirLab = Label(tab3, font=("Arial", 8), text = "J3 Motor Direction")
-# # J3MotDirLab.place(x=10, y=70)
-# # J4MotDirLab = Label(tab3, font=("Arial", 8), text = "J4 Motor Direction")
-# # J4MotDirLab.place(x=10, y=95)
-# # J5MotDirLab = Label(tab3, font=("Arial", 8), text = "J5 Motor Direction")
-# # J5MotDirLab.place(x=10, y=120)
-# # J6MotDirLab = Label(tab3, font=("Arial", 8), text = "J6 Motor Direction")
-# # J6MotDirLab.place(x=10, y=145)
-# # J7MotDirLab = Label(tab3, font=("Arial", 8), text = "J7 Motor Direction")
-# # J7MotDirLab.place(x=10, y=170)
-# # J8MotDirLab = Label(tab3, font=("Arial", 8), text = "J8 Motor Direction")
-# # J8MotDirLab.place(x=10, y=195)
-# # J9MotDirLab = Label(tab3, font=("Arial", 8), text = "J9 Motor Direction")
-# # J9MotDirLab.place(x=10, y=220)
-
-# # J1MotDirEntryField = Entry(tab3,width=5,justify="center")
-# # J1MotDirEntryField.place(x=110, y=20)
-# # J2MotDirEntryField = Entry(tab3,width=5,justify="center")
-# # J2MotDirEntryField.place(x=110, y=45)
-# # J3MotDirEntryField = Entry(tab3,width=5,justify="center")
-# # J3MotDirEntryField.place(x=110, y=70)
-# # J4MotDirEntryField = Entry(tab3,width=5,justify="center")
-# # J4MotDirEntryField.place(x=110, y=95)
-# # J5MotDirEntryField = Entry(tab3,width=5,justify="center")
-# # J5MotDirEntryField.place(x=110, y=120)
-# # J6MotDirEntryField = Entry(tab3,width=5,justify="center")
-# # J6MotDirEntryField.place(x=110, y=145)
-# # J7MotDirEntryField = Entry(tab3,width=5,justify="center")
-# # J7MotDirEntryField.place(x=110, y=170)
-# # J8MotDirEntryField = Entry(tab3,width=5,justify="center")
-# # J8MotDirEntryField.place(x=110, y=195)
-# # J9MotDirEntryField = Entry(tab3,width=5,justify="center")
-# # J9MotDirEntryField.place(x=110, y=220)
-
-
-# # ####  CALIBRATION DIRECTIONS ####
-
-# # J1CalDirLab = Label(tab3, font=("Arial", 8), text = "J1 Calibration Dir.")
-# # J1CalDirLab.place(x=10, y=280)
-# # J2CalDirLab = Label(tab3, font=("Arial", 8), text = "J2 Calibration Dir.")
-# # J2CalDirLab.place(x=10, y=305)
-# # J3CalDirLab = Label(tab3, font=("Arial", 8), text = "J3 Calibration Dir.")
-# # J3CalDirLab.place(x=10, y=330)
-# # J4CalDirLab = Label(tab3, font=("Arial", 8), text = "J4 Calibration Dir.")
-# # J4CalDirLab.place(x=10, y=355)
-# # J5CalDirLab = Label(tab3, font=("Arial", 8), text = "J5 Calibration Dir.")
-# # J5CalDirLab.place(x=10, y=380)
-# # J6CalDirLab = Label(tab3, font=("Arial", 8), text = "J6 Calibration Dir.")
-# # J6CalDirLab.place(x=10, y=405)
-# # J7CalDirLab = Label(tab3, font=("Arial", 8), text = "J7 Calibration Dir.")
-# # J7CalDirLab.place(x=10, y=430)
-# # J8CalDirLab = Label(tab3, font=("Arial", 8), text = "J8 Calibration Dir.")
-# # J8CalDirLab.place(x=10, y=455)
-# # J9CalDirLab = Label(tab3, font=("Arial", 8), text = "J9 Calibration Dir.")
-# # J9CalDirLab.place(x=10, y=480)
-
-# # J1CalDirEntryField = Entry(tab3,width=5,justify="center")
-# # J1CalDirEntryField.place(x=110, y=280)
-# # J2CalDirEntryField = Entry(tab3,width=5,justify="center")
-# # J2CalDirEntryField.place(x=110, y=305)
-# # J3CalDirEntryField = Entry(tab3,width=5,justify="center")
-# # J3CalDirEntryField.place(x=110, y=330)
-# # J4CalDirEntryField = Entry(tab3,width=5,justify="center")
-# # J4CalDirEntryField.place(x=110, y=355)
-# # J5CalDirEntryField = Entry(tab3,width=5,justify="center")
-# # J5CalDirEntryField.place(x=110, y=380)
-# # J6CalDirEntryField = Entry(tab3,width=5,justify="center")
-# # J6CalDirEntryField.place(x=110, y=405)
-# # J7CalDirEntryField = Entry(tab3,width=5,justify="center")
-# # J7CalDirEntryField.place(x=110, y=430)
-# # J8CalDirEntryField = Entry(tab3,width=5,justify="center")
-# # J8CalDirEntryField.place(x=110, y=455)
-# # J9CalDirEntryField = Entry(tab3,width=5,justify="center")
-# # J9CalDirEntryField.place(x=110, y=480)
-
-# # ### axis limits
-# # J1PosLimLab = Label(tab3, font=("Arial", 8), text = "J1 Pos Limit")
-# # J1PosLimLab.place(x=200, y=20)
-# # J1NegLimLab = Label(tab3, font=("Arial", 8), text = "J1 Neg Limit")
-# # J1NegLimLab.place(x=200, y=45)
-# # J2PosLimLab = Label(tab3, font=("Arial", 8), text = "J2 Pos Limit")
-# # J2PosLimLab.place(x=200, y=70)
-# # J2NegLimLab = Label(tab3, font=("Arial", 8), text = "J2 Neg Limit")
-# # J2NegLimLab.place(x=200, y=95)
-# # J3PosLimLab = Label(tab3, font=("Arial", 8), text = "J3 Pos Limit")
-# # J3PosLimLab.place(x=200, y=120)
-# # J3NegLimLab = Label(tab3, font=("Arial", 8), text = "J3 Neg Limit")
-# # J3NegLimLab.place(x=200, y=145)
-# # J4PosLimLab = Label(tab3, font=("Arial", 8), text = "J4 Pos Limit")
-# # J4PosLimLab.place(x=200, y=170)
-# # J4NegLimLab = Label(tab3, font=("Arial", 8), text = "J4 Neg Limit")
-# # J4NegLimLab.place(x=200, y=195)
-# # J5PosLimLab = Label(tab3, font=("Arial", 8), text = "J5 Pos Limit")
-# # J5PosLimLab.place(x=200, y=220)
-# # J5NegLimLab = Label(tab3, font=("Arial", 8), text = "J5 Neg Limit")
-# # J5NegLimLab.place(x=200, y=245)
-# # J6PosLimLab = Label(tab3, font=("Arial", 8), text = "J6 Pos Limit")
-# # J6PosLimLab.place(x=200, y=270)
-# # J6NegLimLab = Label(tab3, font=("Arial", 8), text = "J6 Neg Limit")
-# # J6NegLimLab.place(x=200, y=295)
-
-# # J1PosLimEntryField = Entry(tab3,width=5,justify="center")
-# # J1PosLimEntryField.place(x=280, y=20)
-# # J1NegLimEntryField = Entry(tab3,width=5,justify="center")
-# # J1NegLimEntryField.place(x=280, y=45)
-# # J2PosLimEntryField = Entry(tab3,width=5,justify="center")
-# # J2PosLimEntryField.place(x=280, y=70)
-# # J2NegLimEntryField = Entry(tab3,width=5,justify="center")
-# # J2NegLimEntryField.place(x=280, y=95)
-# # J3PosLimEntryField = Entry(tab3,width=5,justify="center")
-# # J3PosLimEntryField.place(x=280, y=120)
-# # J3NegLimEntryField = Entry(tab3,width=5,justify="center")
-# # J3NegLimEntryField.place(x=280, y=145)
-# # J4PosLimEntryField = Entry(tab3,width=5,justify="center")
-# # J4PosLimEntryField.place(x=280, y=170)
-# # J4NegLimEntryField = Entry(tab3,width=5,justify="center")
-# # J4NegLimEntryField.place(x=280, y=195)
-# # J5PosLimEntryField = Entry(tab3,width=5,justify="center")
-# # J5PosLimEntryField.place(x=280, y=220)
-# # J5NegLimEntryField = Entry(tab3,width=5,justify="center")
-# # J5NegLimEntryField.place(x=280, y=245)
-# # J6PosLimEntryField = Entry(tab3,width=5,justify="center")
-# # J6PosLimEntryField.place(x=280, y=270)
-# # J6NegLimEntryField = Entry(tab3,width=5,justify="center")
-# # J6NegLimEntryField.place(x=280, y=295)
-
-
-### steps per degress
-# # J1StepDegLab = Label(tab3, font=("Arial", 8), text = "J1 Step/Deg")
-# # J1StepDegLab.place(x=200, y=345)
-# # J2StepDegLab = Label(tab3, font=("Arial", 8), text = "J2 Step/Deg")
-# # J2StepDegLab.place(x=200, y=370)
-# # J3StepDegLab = Label(tab3, font=("Arial", 8), text = "J3 Step/Deg")
-# # J3StepDegLab.place(x=200, y=395)
-# # J4StepDegLab = Label(tab3, font=("Arial", 8), text = "J4 Step/Deg")
-# # J4StepDegLab.place(x=200, y=420)
-# # J5StepDegLab = Label(tab3, font=("Arial", 8), text = "J5 Step/Deg")
-# # J5StepDegLab.place(x=200, y=445)
-# # J6StepDegLab = Label(tab3, font=("Arial", 8), text = "J6 Step/Deg")
-# # J6StepDegLab.place(x=200, y=470)
-
-# # J1StepDegEntryField = Entry(tab3,width=5,justify="center")
-# # J1StepDegEntryField.place(x=280, y=345)
-# # J2StepDegEntryField = Entry(tab3,width=5,justify="center")
-# # J2StepDegEntryField.place(x=280, y=370)
-# # J3StepDegEntryField = Entry(tab3,width=5,justify="center")
-# # J3StepDegEntryField.place(x=280, y=395)
-# # J4StepDegEntryField = Entry(tab3,width=5,justify="center")
-# # J4StepDegEntryField.place(x=280, y=420)
-# # J5StepDegEntryField = Entry(tab3,width=5,justify="center")
-# # J5StepDegEntryField.place(x=280, y=445)
-# # J6StepDegEntryField = Entry(tab3,width=5,justify="center")
-# # J6StepDegEntryField.place(x=280, y=470)
-
-
-### DRIVER STEPS
-# # J1DriveMSLab = Label(tab3, font=("Arial", 8), text = "J1 Drive Microstep")
-# # J1DriveMSLab.place(x=390, y=20)
-# # J2DriveMSLab = Label(tab3, font=("Arial", 8), text = "J2 Drive Microstep")
-# # J2DriveMSLab.place(x=390, y=45)
-# # J3DriveMSLab = Label(tab3, font=("Arial", 8), text = "J3 Drive Microstep")
-# # J3DriveMSLab.place(x=390, y=70)
-# # J4DriveMSLab = Label(tab3, font=("Arial", 8), text = "J4 Drive Microstep")
-# # J4DriveMSLab.place(x=390, y=95)
-# # J5DriveMSLab = Label(tab3, font=("Arial", 8), text = "J5 Drive Microstep")
-# # J5DriveMSLab.place(x=390, y=120)
-# # J6DriveMSLab = Label(tab3, font=("Arial", 8), text = "J6 Drive Microstep")
-# # J6DriveMSLab.place(x=390, y=145)
-
-# # J1DriveMSEntryField = Entry(tab3,width=5,justify="center")
-# # J1DriveMSEntryField.place(x=500, y=20)
-# # J2DriveMSEntryField = Entry(tab3,width=5,justify="center")
-# # J2DriveMSEntryField.place(x=500, y=45)
-# # J3DriveMSEntryField = Entry(tab3,width=5,justify="center")
-# # J3DriveMSEntryField.place(x=500, y=70)
-# # J4DriveMSEntryField = Entry(tab3,width=5,justify="center")
-# # J4DriveMSEntryField.place(x=500, y=95)
-# # J5DriveMSEntryField = Entry(tab3,width=5,justify="center")
-# # J5DriveMSEntryField.place(x=500, y=120)
-# # J6DriveMSEntryField = Entry(tab3,width=5,justify="center")
-# # J6DriveMSEntryField.place(x=500, y=145)
-
-
-###ENCODER CPR
-# # J1EncCPRLab = Label(tab3, font=("Arial", 8), text = "J1 Encoder CPR")
-# # J1EncCPRLab.place(x=390, y=195)
-# # J2EncCPRLab = Label(tab3, font=("Arial", 8), text = "J2 Encoder CPR")
-# # J2EncCPRLab.place(x=390, y=220)
-# # J3EncCPRLab = Label(tab3, font=("Arial", 8), text = "J3 Encoder CPR")
-# # J3EncCPRLab.place(x=390, y=245)
-# # J4EncCPRLab = Label(tab3, font=("Arial", 8), text = "J4 Encoder CPR")
-# # J4EncCPRLab.place(x=390, y=270)
-# # J5EncCPRLab = Label(tab3, font=("Arial", 8), text = "J5 Encoder CPR")
-# # J5EncCPRLab.place(x=390, y=295)
-# # J6EncCPRLab = Label(tab3, font=("Arial", 8), text = "J6 Encoder CPR")
-# # J6EncCPRLab.place(x=390, y=320)
-
-# # J1EncCPREntryField = Entry(tab3,width=5,justify="center")
-# # J1EncCPREntryField.place(x=500, y=195)
-# # J2EncCPREntryField = Entry(tab3,width=5,justify="center")
-# # J2EncCPREntryField.place(x=500, y=220)
-# # J3EncCPREntryField = Entry(tab3,width=5,justify="center")
-# # J3EncCPREntryField.place(x=500, y=245)
-# # J4EncCPREntryField = Entry(tab3,width=5,justify="center")
-# # J4EncCPREntryField.place(x=500, y=270)
-# # J5EncCPREntryField = Entry(tab3,width=5,justify="center")
-# # J5EncCPREntryField.place(x=500, y=295)
-# # J6EncCPREntryField = Entry(tab3,width=5,justify="center")
-# # J6EncCPREntryField.place(x=500, y=320)
-
-
-# ### DH PARAMS
-# 
-# ### DRIVER STEPS
-# J1DHparamLab = Label(tab3, font=("Arial", 8), text = "J1")
-# J1DHparamLab.place(x=600, y=45)
-# J1DHparamLab = Label(tab3, font=("Arial", 8), text = "J2")
-# J1DHparamLab.place(x=600, y=70)
-# J1DHparamLab = Label(tab3, font=("Arial", 8), text = "J3")
-# J1DHparamLab.place(x=600, y=95)
-# J1DHparamLab = Label(tab3, font=("Arial", 8), text = "J4")
-# J1DHparamLab.place(x=600, y=120)
-# J1DHparamLab = Label(tab3, font=("Arial", 8), text = "J5")
-# J1DHparamLab.place(x=600, y=145)
-# J1DHparamLab = Label(tab3, font=("Arial", 8), text = "J6")
-# J1DHparamLab.place(x=600, y=170)
-# 
-# ΘDHparamLab = Label(tab3, font=("Arial", 8), text = "DH-Θ")
-# ΘDHparamLab.place(x=645, y=20)
-# αDHparamLab = Label(tab3, font=("Arial", 8), text = "DH-α")
-# αDHparamLab.place(x=700, y=20)
-# dDHparamLab = Label(tab3, font=("Arial", 8), text = "DH-d")
-# dDHparamLab.place(x=755, y=20)
-# aDHparamLab = Label(tab3, font=("Arial", 8), text = "DH-a")
-# aDHparamLab.place(x=810, y=20)
-# 
-# 
-# J1ΘEntryField = Entry(tab3,width=5,justify="center")
-# J1ΘEntryField.place(x=630, y=45)
-# J2ΘEntryField = Entry(tab3,width=5,justify="center")
-# J2ΘEntryField.place(x=630, y=70)
-# J3ΘEntryField = Entry(tab3,width=5,justify="center")
-# J3ΘEntryField.place(x=630, y=95)
-# J4ΘEntryField = Entry(tab3,width=5,justify="center")
-# J4ΘEntryField.place(x=630, y=120)
-# J5ΘEntryField = Entry(tab3,width=5,justify="center")
-# J5ΘEntryField.place(x=630, y=145)
-# J6ΘEntryField = Entry(tab3,width=5,justify="center")
-# J6ΘEntryField.place(x=630, y=170)
-# 
-# J1αEntryField = Entry(tab3,width=5,justify="center")
-# J1αEntryField.place(x=685, y=45)
-# J2αEntryField = Entry(tab3,width=5,justify="center")
-# J2αEntryField.place(x=685, y=70)
-# J3αEntryField = Entry(tab3,width=5,justify="center")
-# J3αEntryField.place(x=685, y=95)
-# J4αEntryField = Entry(tab3,width=5,justify="center")
-# J4αEntryField.place(x=685, y=120)
-# J5αEntryField = Entry(tab3,width=5,justify="center")
-# J5αEntryField.place(x=685, y=145)
-# J6αEntryField = Entry(tab3,width=5,justify="center")
-# J6αEntryField.place(x=685, y=170)
-# 
-# J1dEntryField = Entry(tab3,width=5,justify="center")
-# J1dEntryField.place(x=740, y=45)
-# J2dEntryField = Entry(tab3,width=5,justify="center")
-# J2dEntryField.place(x=740, y=70)
-# J3dEntryField = Entry(tab3,width=5,justify="center")
-# J3dEntryField.place(x=740, y=95)
-# J4dEntryField = Entry(tab3,width=5,justify="center")
-# J4dEntryField.place(x=740, y=120)
-# J5dEntryField = Entry(tab3,width=5,justify="center")
-# J5dEntryField.place(x=740, y=145)
-# J6dEntryField = Entry(tab3,width=5,justify="center")
-# J6dEntryField.place(x=740, y=170)
-# 
-# J1aEntryField = Entry(tab3,width=5,justify="center")
-# J1aEntryField.place(x=795, y=45)
-# J2aEntryField = Entry(tab3,width=5,justify="center")
-# J2aEntryField.place(x=795, y=70)
-# J3aEntryField = Entry(tab3,width=5,justify="center")
-# J3aEntryField.place(x=795, y=95)
-# J4aEntryField = Entry(tab3,width=5,justify="center")
-# J4aEntryField.place(x=795, y=120)
-# J5aEntryField = Entry(tab3,width=5,justify="center")
-# J5aEntryField.place(x=795, y=145)
-# J6aEntryField = Entry(tab3,width=5,justify="center")
-# J6aEntryField.place(x=795, y=170)
-
-
-# ### LOAD DEFAULT ###
-# 
-# loadAR4Mk2But = Button(tab3,  text="Load AR4-MK3 Defaults",  width=26, command = LoadAR4Mk3default)
-# loadAR4Mk2But.place(x=1150, y=470)
-# 
-# loadAR4Mk2But = Button(tab3,  text="Load AR4-MK2 Defaults",  width=26, command = LoadAR4Mk2default)
-# loadAR4Mk2But.place(x=1150, y=510)
-# 
-# loadAR4But = Button(tab3,  text="Load AR4 Defaults",  width=26, command = LoadAR4default)
-# loadAR4But.place(x=1150, y=550)
-# 
-# loadAR3But = Button(tab3,  text="Load AR3 Defaults",  width=26, command = LoadAR3default)
-# loadAR3But.place(x=1150, y=590)
-# 
-# 
-# 
-# 
-# 
-# 
-# #### SAVE ####
-# 
-# saveCalBut = Button(tab3,  text="SAVE",  width=26, command = SaveAndApplyCalibration)
-# saveCalBut.place(x=1150, y=630)
+loadMaxStepBut = Button(defaultsFrame, text="Load Max Microsteps", width=26, command=LoadMaxdefault)
+#loadMaxStepBut.grid(row=9, column=0, padx=5, pady=5)
 
 
 
@@ -14823,8 +14949,8 @@ live_lbl = Label(live_frame)
 live_lbl.place(x=0, y=0)
 
 
-template_frame = Frame(tab6,width=120,height=150)
-template_frame.place(x=575, y=50)
+template_frame = Frame(tab6,width=150,height=150)
+template_frame.place(x=565, y=50)
 
 template_lbl = Label(template_frame)
 template_lbl.place(x=0, y=0)
@@ -14864,25 +14990,19 @@ match CE['Platform']['OS']:
     try:
       # If we have real cams, preselect the first real one; otherwise keep the placeholder
       if camList and camList[0] != "Select a Camera":
-        vismenu = OptionMenu(tab6, visoptions, camList[0], *camList, command=on_camera_select)
+        vismenu = OptionMenu(tab6, visoptions, camList[0], *camList)
         visoptions.set(camList[0])  # ensures the real cam (e.g., Logi C270) is selected
       else:
-        vismenu = OptionMenu(tab6, visoptions, "Select a Camera", command=on_camera_select)
+        vismenu = OptionMenu(tab6, visoptions, "Select a Camera")
       vismenu.config(width=20)
       vismenu.place(x=10, y=10)
     except Exception:
       logger.error("no camera")
 
-    def on_camera_select(chosen_label):
-      CAL['curCam'] = chosen_label
-      logger.debug(f"Debug - User picked: {chosen_label}")
-
   case "Linux":
     # Build label->id map
-    camMap = {c.label: c.id for c in CE['Cameras']['Enum']}
-    camList = list(camMap.keys())
-    logger.debug(f"camMap value: {camMap}")
-    logger.debug(f"Cameras Detected: {camList}")
+    label_to_id = {c.label: c.id for c in CE['Cameras']['Enum']}
+    camList = list(label_to_id.keys())
 
     selected_label = tk.StringVar(value=(camList[0] if camList else "Select a Camera"))
 
@@ -14890,9 +15010,8 @@ match CE['Platform']['OS']:
     visoptions.set("Select a Camera")
 
     def on_camera_select(chosen_label):
-      cam_id = camMap.get(chosen_label, "None")
-      CAL['curCam'] = visoptions.get()
-      logger.debug(f"Debug - User picked: {chosen_label} -> using id: {cam_id}")
+      cam_id = label_to_id.get(chosen_label, "None")
+      logger.debug("Debug - User picked:", chosen_label, " -> using id:", cam_id)
 
     try:
       vismenu = OptionMenu(tab6, visoptions, selected_label.get(), *camList, command=on_camera_select)
@@ -14900,6 +15019,7 @@ match CE['Platform']['OS']:
       vismenu.place(x=10, y=10)
     except Exception:
       logger.error("no camera")
+
 
 
 
@@ -14920,10 +15040,10 @@ FindVisBut = Button(tab6,  text="Snap & Find",  width=12, command = snapFind)
 FindVisBut.place(x=270, y=50)
 
 
-ZeroBrCnBut = Button(tab6, text="Zero",  width=4, command = zeroBrCn)
+ZeroBrCnBut = Button(tab6, text="Zero",  width=5, command = zeroBrCn)
 ZeroBrCnBut.place(x=10, y=110)
 
-maskBut = Button(tab6, text="Mask",  width=4, command = selectMask)
+maskBut = Button(tab6, text="Mask",  width=5, command = selectMask)
 maskBut.place(x=10, y=150)
 
 
@@ -14938,21 +15058,21 @@ VisZoomSlide.place(x=75, y=95)
 VisZoomSlide.set(50)
 
 VisZoomLab = Label(tab6, text = "Zoom")
-VisZoomLab.place(x=75, y=115)
+VisZoomLab.place(x=75, y=110)
 
 VisBrightSlide = Scale(tab6, from_=-127, to=127,  length=250, orient=HORIZONTAL)
 VisBrightSlide.bind("<ButtonRelease-1>", VisUpdateBriCon)
 VisBrightSlide.place(x=75, y=130)
 
 VisBrightLab = Label(tab6, text = "Brightness")
-VisBrightLab.place(x=75, y=150)
+VisBrightLab.place(x=75, y=145)
 
 VisContrastSlide = Scale(tab6, from_=-127, to=127,  length=250, orient=HORIZONTAL)
 VisContrastSlide.bind("<ButtonRelease-1>", VisUpdateBriCon)
 VisContrastSlide.place(x=75, y=165)
 
 VisContrastLab = Label(tab6, text = "Contrast")
-VisContrastLab.place(x=75, y=185)
+VisContrastLab.place(x=75, y=180)
 
 
 fullRotCbut = Checkbutton(tab6, text="Full Rotation Search",variable = RUN['fullRot'])
@@ -14978,20 +15098,21 @@ saveCalBut.place(x=915, y=340)
 #### 6 ENTRY FIELDS##########################################################
 #############################################################################
 
+VisSelObjLab = Label(tab6, text = "Select Object")
+VisSelObjLab.place(x=390, y=82)
 
-
-VisBacColorEntryField = Entry(tab6,width=12,justify="center")
-VisBacColorEntryField.place(x=390, y=100)
+VisBacColorEntryField = Entry(tab6,width=14,justify="center")
+VisBacColorEntryField.place(x=390, y=115)
 VisBacColorLab = Label(tab6, text = "Background Color")
-VisBacColorLab.place(x=390, y=120)
+VisBacColorLab.place(x=390, y=135)
 
 bgAutoCbut = Checkbutton(tab6, command=checkAutoBG, text="Auto",variable = RUN['autoBG'])
-bgAutoCbut.place(x=490, y=101)
+bgAutoCbut.place(x=490, y=116)
 
 VisScoreEntryField = Entry(tab6,width=12,justify="center")
-VisScoreEntryField.place(x=390, y=150)
+VisScoreEntryField.place(x=390, y=165)
 VisScoreLab = Label(tab6, text = "Score Threshold")
-VisScoreLab.place(x=390, y=170)
+VisScoreLab.place(x=390, y=185)
 
 
 
@@ -15314,7 +15435,7 @@ incrementEntryField.insert(0,"10")
 speedEntryField.insert(0,"25")
 ACCspeedField.insert(0,"15")
 DECspeedField.insert(0,"15")
-ACCrampField.insert(0,"80")
+ACCrampField.insert(0,"50")
 roundEntryField.insert(0,"0")
 #ProgEntryField.insert(0,(Prog))
 SavePosEntryField.insert(0,"1")
@@ -15519,8 +15640,7 @@ if (CAL['pickClosestVal'] == 1):
   RUN['pickClosest'].set(True)
 if (CAL['pick180Val'] == 1):
   RUN['pick180'].set(True)  
-if CAL['curCam'] in camList:
-  visoptions.set(CAL['curCam'])
+visoptions.set(CAL['curCam'])
 if (CAL['fullRotVal'] == 1):
   RUN['fullRot'].set(True)
 if (CAL['autoBGVal'] == 1):
@@ -15566,6 +15686,15 @@ J6CalDirEntryField.insert(0,str(CAL['J6CalDir']))
 J7CalDirEntryField.insert(0,str(CAL['J7CalDir']))
 J8CalDirEntryField.insert(0,str(CAL['J8CalDir']))
 J9CalDirEntryField.insert(0,str(CAL['J9CalDir']))
+J1CalHighLowEntryField.insert(0,str(CAL['J1CalSwitch']))
+J2CalHighLowEntryField.insert(0,str(CAL['J2CalSwitch']))
+J3CalHighLowEntryField.insert(0,str(CAL['J3CalSwitch']))
+J4CalHighLowEntryField.insert(0,str(CAL['J4CalSwitch']))
+J5CalHighLowEntryField.insert(0,str(CAL['J5CalSwitch']))
+J6CalHighLowEntryField.insert(0,str(CAL['J6CalSwitch']))
+J7CalHighLowEntryField.insert(0,str(CAL['J7CalSwitch']))
+J8CalHighLowEntryField.insert(0,str(CAL['J8CalSwitch']))
+J9CalHighLowEntryField.insert(0,str(CAL['J9CalSwitch']))
 J1PosLimEntryField.insert(0,str(CAL['J1PosLim']))
 J1NegLimEntryField.insert(0,str(CAL['J1NegLim']))
 J2PosLimEntryField.insert(0,str(CAL['J2PosLim']))
@@ -15688,24 +15817,13 @@ Copyright © 2022 by Annin Robotics. All Rights Reserved"
 #tkinter.messagebox.showwarning("AR4 License / Copyright notice", msg)
 RUN['xboxUse'] = 0
 
-
+tab1.lastProg = ""
 tab1.after(100, setCom)
 
 #tab1.mainloop()
 root.mainloop()
 
 
+
 #manEntryField.delete(0, 'end')
 #manEntryField.insert(0,value)
-
-
-# Exit cleanly
-try:
-  if root.winfo_exists():
-    root.destroy()
-except:
-  pass
-
-sys.exit(0)
-
-
