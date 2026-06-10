@@ -160,6 +160,10 @@ from tkinter import filedialog as fd
 import tkinter.messagebox
 from PIL import Image, ImageTk
 
+# Use ttk container widgets so options like `padding` work consistently.
+Frame = ttk.Frame
+LabelFrame = ttk.LabelFrame
+
 import vtk
 from vtkmodules.tk.vtkTkRenderWindowInteractor import vtkTkRenderWindowInteractor
 import vtkmodules.vtkInteractionStyle as vtkIS
@@ -15015,6 +15019,23 @@ match CE['Platform']['OS']:
 
     try:
       vismenu = OptionMenu(tab6, visoptions, selected_label.get(), *camList, command=on_camera_select)
+      vismenu.config(width=20)
+      vismenu.place(x=10, y=10)
+    except Exception:
+      logger.error("no camera")
+
+  case _:
+    # Fallback for macOS/other platforms: keep UI usable even without camera enum support.
+    camList = ["Select a Camera"]
+    visoptions = StringVar(tab6)
+    visoptions.set("Select a Camera")
+
+    def on_camera_select(chosen_label):
+      CAL['curCam'] = chosen_label
+      logger.debug(f"Debug - User picked: {chosen_label}")
+
+    try:
+      vismenu = OptionMenu(tab6, visoptions, "Select a Camera", *camList, command=on_camera_select)
       vismenu.config(width=20)
       vismenu.place(x=10, y=10)
     except Exception:
