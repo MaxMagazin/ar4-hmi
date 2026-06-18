@@ -208,6 +208,10 @@ if getattr(sys, "frozen", False):
 else:
     DIR = pathlib.Path(__file__).resolve().parent         # folder containing AR4.py
 
+STL_DIR = DIR / "stl"
+def robot_stl_path(filename):
+  return str(STL_DIR / filename)
+
 os.chdir(DIR)    
 
 RUN['cropping'] = False
@@ -1568,7 +1572,7 @@ def build_robot_actors(renderer):
     # Load STL files and create actors
     for stl in stl_files:
         reader = vtk.vtkSTLReader()
-        reader.SetFileName(stl)
+        reader.SetFileName(robot_stl_path(stl))
         reader.Update()
 
         mapper = vtk.vtkPolyDataMapper()
