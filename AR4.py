@@ -213,7 +213,7 @@ os.chdir(DIR)
 RUN['cropping'] = False
 
 root = Tk()
-root.wm_title("AR4 Software Ver 6.8")
+root.wm_title("AR4 Software Ver 6.8 Maxfork")
 root.iconphoto(True, tk.PhotoImage(file="AR.png"))
 
 # Make headless RPi fit app on screen better

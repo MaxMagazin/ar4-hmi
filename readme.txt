@@ -16,16 +16,18 @@ Using Source Code
 		python -m pip install datetime
 		python -m pip install pathlib
 		python -m pip install scipy
-		python -m pip installttkbootstrap
+		python -m pip install ttkbootstrap
+		python -m pip install pybind11 
 		
 		
     4. Compile kinematics.cpp
 		open cmd promt - "x64 Native Tools Command Prompt for VS 2022"
 		cd "C:\Users\Chris\Desktop\AR4-MK3\AR4-MK3 Software\AR4 HMI interface 6.0 source"
+		cd .\ARrobots\src 
 		rmdir /s /q build
 		mkdir build
 		cd build
-		cmake .. -A x64 -Dpybind11_DIR="C:/Users/Chris/AppData/Local/Programs/Python/Python312/Lib/site-packages/pybind11/share/cmake/pybind11"
+		cmake .. -A x64 -Dpybind11_DIR="C:\Users\<User>\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\pybind11\share\cmake\pybind11"
 		cmake --build . --config Release
 
 
