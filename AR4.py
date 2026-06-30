@@ -15386,10 +15386,165 @@ draw_bg_image_tk = None
 draw_bg_image_item = None
 draw_bg_image_path = None
 draw_bg_image_pil = None
+draw_trace_data = []
+draw_trace_layer_items = []
+draw_trace_after_id = None
+draw_trace_step_delay_ms = 25
+draw_trace_cursor_item = None
+draw_progress_scale = None
+draw_progress_internal_update = False
+
+
+def _stop_trace_playback():
+  global draw_trace_after_id
+
+  if draw_trace_after_id is not None:
+    try:
+      drawCanvas.after_cancel(draw_trace_after_id)
+    except Exception:
+      pass
+    draw_trace_after_id = None
+
+  _clear_trace_cursor()
+
+
+def _clear_trace_cursor():
+  global draw_trace_cursor_item
+
+  if draw_trace_cursor_item is not None:
+    try:
+      drawCanvas.delete(draw_trace_cursor_item)
+    except Exception:
+      pass
+    draw_trace_cursor_item = None
+
+
+def _set_trace_cursor(x, y):
+  global draw_trace_cursor_item
+
+  _clear_trace_cursor()
+  r = 5
+  draw_trace_cursor_item = drawCanvas.create_oval(
+    x - r,
+    y - r,
+    x + r,
+    y + r,
+    outline="red",
+    width=2,
+    fill=""
+  )
+
+
+def _clear_trace_layer_items():
+  for item_id in draw_trace_layer_items:
+    try:
+      drawCanvas.delete(item_id)
+    except Exception:
+      pass
+  draw_trace_layer_items.clear()
+
+
+def _set_draw_progress_value(value):
+  global draw_progress_internal_update
+
+  if draw_progress_scale is None:
+    return
+
+  draw_progress_internal_update = True
+  try:
+    draw_progress_scale.set(value)
+  finally:
+    draw_progress_internal_update = False
+
+
+def _update_draw_progress_limits(reset=False):
+  if draw_progress_scale is None:
+    return
+
+  max_val = max(0, len(draw_trace_data))
+  draw_progress_scale.configure(to=max_val)
+  if reset:
+    _set_draw_progress_value(0)
+
+
+def _draw_trace_shaded_base():
+  redraw_draw_canvas()
+  _clear_trace_layer_items()
+
+  shade_id = drawCanvas.create_rectangle(
+    0,
+    0,
+    DRAW_CANVAS_WIDTH,
+    DRAW_CANVAS_HEIGHT,
+    fill="#d0d0d0",
+    outline="",
+    stipple="gray50"
+  )
+  draw_trace_layer_items.append(shade_id)
+
+
+def _render_trace_to_step(step_count):
+  if not draw_trace_data:
+    _set_draw_progress_value(0)
+    return
+
+  step_count = max(0, min(int(step_count), len(draw_trace_data)))
+  _draw_trace_shaded_base()
+
+  cursor_x = None
+  cursor_y = None
+
+  for i in range(step_count):
+    cmd = draw_trace_data[i]
+    item_id = None
+
+    if cmd.get("type") == "line":
+      item_id = drawCanvas.create_line(
+        cmd["x1"],
+        cmd["y1"],
+        cmd["x2"],
+        cmd["y2"],
+        width=2,
+        fill="black",
+        capstyle=ROUND,
+        smooth=True
+      )
+      cursor_x = cmd["x2"]
+      cursor_y = cmd["y2"]
+    elif cmd.get("type") == "dot":
+      x = cmd["x"]
+      y = cmd["y"]
+      item_id = drawCanvas.create_oval(x - 1, y - 1, x + 1, y + 1, fill="black", outline="")
+      cursor_x = x
+      cursor_y = y
+
+    if item_id is not None:
+      draw_trace_layer_items.append(item_id)
+
+  if cursor_x is not None and cursor_y is not None:
+    _set_trace_cursor(cursor_x, cursor_y)
+  else:
+    _clear_trace_cursor()
+
+  _set_draw_progress_value(step_count)
+
+
+def on_draw_progress_change(value):
+  if draw_progress_internal_update:
+    return
+
+  if not draw_trace_data:
+    _set_draw_progress_value(0)
+    return
+
+  _stop_trace_playback()
+  _render_trace_to_step(int(float(value)))
 
 
 def redraw_draw_canvas():
   global draw_bg_image_item
+
+  _stop_trace_playback()
 
   drawCanvas.delete("all")
   if draw_bg_image_tk is not None:
@@ -15429,14 +15584,424 @@ def stop_draw_stroke(_event):
   draw_last_point[1] = None
 
 def clear_canvas():
-  global draw_bg_image_tk, draw_bg_image_item, draw_bg_image_path, draw_bg_image_pil
+  global draw_bg_image_tk, draw_bg_image_item, draw_bg_image_path, draw_bg_image_pil, draw_trace_data
 
+  _stop_trace_playback()
   draw_segments.clear()
+  draw_trace_data.clear()
+  draw_trace_layer_items.clear()
   draw_bg_image_tk = None
   draw_bg_image_item = None
   draw_bg_image_path = None
   draw_bg_image_pil = None
   drawCanvas.delete("all")
+  _update_draw_progress_limits(reset=True)
+
+
+def _build_draw_composite_image():
+  composite = Image.new("RGB", (DRAW_CANVAS_WIDTH, DRAW_CANVAS_HEIGHT), "white")
+
+  if draw_bg_image_pil is not None:
+    bg_img = draw_bg_image_pil.convert("RGB")
+    bg_w, bg_h = bg_img.size
+    if bg_w > 0 and bg_h > 0:
+      off_x = int((DRAW_CANVAS_WIDTH - bg_w) / 2)
+      off_y = int((DRAW_CANVAS_HEIGHT - bg_h) / 2)
+      composite.paste(bg_img, (off_x, off_y))
+
+  draw = ImageDraw.Draw(composite)
+  for x1, y1, x2, y2 in draw_segments:
+    draw.line((x1, y1, x2, y2), fill="black", width=2)
+
+  return composite
+
+
+def _extract_black_pixel_runs(composite_img, threshold=80):
+  gray = ImageOps.grayscale(composite_img)
+  arr = np.array(gray, dtype=np.uint8)
+  black_mask = arr <= threshold
+
+  if not np.any(black_mask):
+    return []
+
+  # These values control how aggressively the 1px skeleton path is simplified.
+  simplify_epsilon = 2.5
+  min_point_spacing_sq = 9.0
+
+  neighbor_dirs = [
+    (-1, -1), (0, -1), (1, -1),
+    (-1, 0),            (1, 0),
+    (-1, 1),  (0, 1),   (1, 1)
+  ]
+
+  height, width = black_mask.shape
+  visited_pixels = np.zeros_like(black_mask, dtype=bool)
+
+  def edge_key(a, b):
+    return (a, b) if a <= b else (b, a)
+
+  def point_line_distance(pt, a, b):
+    ax, ay = a
+    bx, by = b
+    px, py = pt
+    vx = bx - ax
+    vy = by - ay
+    if vx == 0 and vy == 0:
+      return math.hypot(px - ax, py - ay)
+    t = ((px - ax) * vx + (py - ay) * vy) / float(vx * vx + vy * vy)
+    t = max(0.0, min(1.0, t))
+    nx = ax + t * vx
+    ny = ay + t * vy
+    return math.hypot(px - nx, py - ny)
+
+  def rdp(points, epsilon):
+    if len(points) < 3:
+      return points
+
+    start = points[0]
+    end = points[-1]
+    max_dist = -1.0
+    index = -1
+
+    for i in range(1, len(points) - 1):
+      d = point_line_distance(points[i], start, end)
+      if d > max_dist:
+        max_dist = d
+        index = i
+
+    if max_dist <= epsilon:
+      return [start, end]
+
+    left = rdp(points[: index + 1], epsilon)
+    right = rdp(points[index:], epsilon)
+    return left[:-1] + right
+
+  def zhang_suen_thinning(mask):
+    work = mask.astype(np.uint8).copy()
+
+    while True:
+      changed = False
+      for phase in (0, 1):
+        to_remove = []
+        ys, xs = np.where(work == 1)
+        for y, x in zip(ys, xs):
+          if y == 0 or y == work.shape[0] - 1 or x == 0 or x == work.shape[1] - 1:
+            continue
+
+          p2 = work[y - 1, x]
+          p3 = work[y - 1, x + 1]
+          p4 = work[y, x + 1]
+          p5 = work[y + 1, x + 1]
+          p6 = work[y + 1, x]
+          p7 = work[y + 1, x - 1]
+          p8 = work[y, x - 1]
+          p9 = work[y - 1, x - 1]
+
+          neighbors = [p2, p3, p4, p5, p6, p7, p8, p9]
+          neighbor_count = int(sum(neighbors))
+          if neighbor_count < 2 or neighbor_count > 6:
+            continue
+
+          transitions = 0
+          for i in range(8):
+            if neighbors[i] == 0 and neighbors[(i + 1) % 8] == 1:
+              transitions += 1
+          if transitions != 1:
+            continue
+
+          if phase == 0:
+            if p2 * p4 * p6 != 0:
+              continue
+            if p4 * p6 * p8 != 0:
+              continue
+          else:
+            if p2 * p4 * p8 != 0:
+              continue
+            if p2 * p6 * p8 != 0:
+              continue
+
+          to_remove.append((y, x))
+
+        if to_remove:
+          changed = True
+          for y, x in to_remove:
+            work[y, x] = 0
+
+      if not changed:
+        break
+
+    return work.astype(bool)
+
+  def component_from_seed(seed_x, seed_y):
+    stack = [(seed_x, seed_y)]
+    component = []
+    visited_pixels[seed_y, seed_x] = True
+
+    while stack:
+      x, y = stack.pop()
+      component.append((x, y))
+      for dx, dy in neighbor_dirs:
+        nx = x + dx
+        ny = y + dy
+        if nx < 0 or ny < 0 or nx >= width or ny >= height:
+          continue
+        if visited_pixels[ny, nx] or not black_mask[ny, nx]:
+          continue
+        visited_pixels[ny, nx] = True
+        stack.append((nx, ny))
+
+    return component
+
+  def component_to_skeleton(component_points):
+    xs = [p[0] for p in component_points]
+    ys = [p[1] for p in component_points]
+    min_x = max(0, min(xs) - 1)
+    min_y = max(0, min(ys) - 1)
+    max_x = min(width - 1, max(xs) + 1)
+    max_y = min(height - 1, max(ys) + 1)
+
+    local_mask = np.zeros((max_y - min_y + 1, max_x - min_x + 1), dtype=np.uint8)
+    for x, y in component_points:
+      local_mask[y - min_y, x - min_x] = 1
+
+    thinned = zhang_suen_thinning(local_mask)
+    skel_y, skel_x = np.where(thinned)
+    skeleton_points = [(int(x + min_x), int(y + min_y)) for y, x in zip(skel_y, skel_x)]
+
+    if len(skeleton_points) < 2:
+      return component_points
+    return skeleton_points
+
+  def build_adjacency(points):
+    point_set = set(points)
+    adjacency = {}
+    for x, y in sorted(point_set, key=lambda p: (p[1], p[0])):
+      neigh = []
+      for dx, dy in neighbor_dirs:
+        cand = (x + dx, y + dy)
+        if cand in point_set:
+          neigh.append(cand)
+      adjacency[(x, y)] = neigh
+    return point_set, adjacency
+
+  def choose_next(current, prev, candidates):
+    if len(candidates) == 1:
+      return candidates[0]
+    if prev is None:
+      return min(candidates, key=lambda p: (p[1], p[0]))
+
+    vx = current[0] - prev[0]
+    vy = current[1] - prev[1]
+    best = candidates[0]
+    best_score = None
+    for cand in candidates:
+      cx = cand[0] - current[0]
+      cy = cand[1] - current[1]
+      score = (vx * cx + vy * cy, -((cx * cx) + (cy * cy)), -cand[1], -cand[0])
+      if best_score is None or score > best_score:
+        best_score = score
+        best = cand
+    return best
+
+  def trace_paths_from_skeleton(skeleton_points):
+    point_set, adjacency = build_adjacency(skeleton_points)
+    if len(point_set) == 1:
+      return [[next(iter(point_set))]]
+
+    endpoints = sorted([pt for pt in point_set if len(adjacency[pt]) <= 1], key=lambda p: (p[1], p[0]))
+    branchpoints = sorted([pt for pt in point_set if len(adjacency[pt]) > 2], key=lambda p: (p[1], p[0]))
+    visited_edges = set()
+    paths = []
+
+    def available_edges(node):
+      out = []
+      for n in adjacency[node]:
+        ek = edge_key(node, n)
+        if ek not in visited_edges:
+          out.append(n)
+      return out
+
+    def trace_from(start):
+      path = [start]
+      prev = None
+      cur = start
+
+      while True:
+        candidates = available_edges(cur)
+        if prev is not None:
+          non_back = [c for c in candidates if c != prev]
+          if non_back:
+            candidates = non_back
+        if not candidates:
+          break
+
+        nxt = choose_next(cur, prev, candidates)
+        visited_edges.add(edge_key(cur, nxt))
+        path.append(nxt)
+        prev, cur = cur, nxt
+
+        if len(adjacency[cur]) != 2:
+          break
+
+      return path
+
+    for start in endpoints + branchpoints:
+      while available_edges(start):
+        paths.append(trace_from(start))
+
+    for start in sorted(point_set, key=lambda p: (p[1], p[0])):
+      while available_edges(start):
+        paths.append(trace_from(start))
+
+    if not paths and point_set:
+      start = min(point_set, key=lambda p: (p[1], p[0]))
+      paths.append([start])
+
+    return paths
+
+  def path_to_commands(path):
+    if not path:
+      return []
+    if len(path) == 1:
+      x, y = path[0]
+      return [{"type": "dot", "x": x, "y": y}]
+
+    simplified = rdp(path, simplify_epsilon)
+    filtered = [simplified[0]]
+    for i in range(1, len(simplified)):
+      x, y = simplified[i]
+      lx, ly = filtered[-1]
+      if i != len(simplified) - 1:
+        dx = x - lx
+        dy = y - ly
+        if (dx * dx + dy * dy) < min_point_spacing_sq:
+          continue
+      filtered.append((x, y))
+
+    if len(filtered) == 1:
+      x, y = filtered[0]
+      return [{"type": "dot", "x": x, "y": y}]
+
+    commands = []
+    for i in range(1, len(filtered)):
+      x1, y1 = filtered[i - 1]
+      x2, y2 = filtered[i]
+      if x1 == x2 and y1 == y2:
+        continue
+      commands.append({"type": "line", "x1": x1, "y1": y1, "x2": x2, "y2": y2})
+
+    return commands
+
+  def top_left_key(cmd):
+    if cmd.get("type") == "line":
+      p1 = (cmd["x1"], cmd["y1"])
+      p2 = (cmd["x2"], cmd["y2"])
+      pt = p1 if (p1[1], p1[0]) <= (p2[1], p2[0]) else p2
+      return pt[1], pt[0]
+    return cmd["y"], cmd["x"]
+
+  trace_items = []
+  seed_y, seed_x = np.where(black_mask)
+  seeds = sorted(zip(seed_x.tolist(), seed_y.tolist()), key=lambda p: (p[1], p[0]))
+
+  for seed_x, seed_y in seeds:
+    if visited_pixels[seed_y, seed_x]:
+      continue
+    component = component_from_seed(seed_x, seed_y)
+    skeleton = component_to_skeleton(component)
+    paths = trace_paths_from_skeleton(skeleton)
+    for path in paths:
+      trace_items.extend(path_to_commands(path))
+
+  trace_items.sort(key=top_left_key)
+  return trace_items
+
+
+def trace():
+  global draw_trace_data
+
+  if draw_bg_image_pil is None and not draw_segments:
+    logger.warning("Trace requested but canvas has no drawable content")
+    draw_trace_data = []
+    return
+
+  try:
+    #background/image layer (if one was loaded) and the user’s drawn stroke data
+    composite = _build_draw_composite_image()
+
+    
+    draw_trace_data = _extract_black_pixel_runs(composite)
+
+    logger.info(
+      f"Trace completed: {len(draw_trace_data)} commands generated "
+      f"(lines/dots)"
+    )
+    logger.info("the traced data is:")
+    for cmd in draw_trace_data:
+      logger.info(f"  {cmd}")
+
+    _update_draw_progress_limits(reset=True)
+    
+  except Exception as e:
+    logger.error(f"Failed to trace drawing image: {e}")
+
+
+def _trace_draw_step(index):
+  global draw_trace_after_id
+
+  if index >= len(draw_trace_data):
+    draw_trace_after_id = None
+    _clear_trace_cursor()
+    _set_draw_progress_value(len(draw_trace_data))
+    return
+
+  cmd = draw_trace_data[index]
+  item_id = None
+  cursor_x = None
+  cursor_y = None
+
+  if cmd.get("type") == "line":
+    item_id = drawCanvas.create_line(
+      cmd["x1"],
+      cmd["y1"],
+      cmd["x2"],
+      cmd["y2"],
+      width=2,
+      fill="black",
+      capstyle=ROUND,
+      smooth=True
+    )
+    cursor_x = cmd["x2"]
+    cursor_y = cmd["y2"]
+  elif cmd.get("type") == "dot":
+    x = cmd["x"]
+    y = cmd["y"]
+    item_id = drawCanvas.create_oval(x - 1, y - 1, x + 1, y + 1, fill="black", outline="")
+    cursor_x = x
+    cursor_y = y
+
+  if item_id is not None:
+    draw_trace_layer_items.append(item_id)
+
+  if cursor_x is not None and cursor_y is not None:
+    _set_trace_cursor(cursor_x, cursor_y)
+
+  _set_draw_progress_value(index + 1)
+
+  draw_trace_after_id = drawCanvas.after(draw_trace_step_delay_ms, lambda: _trace_draw_step(index + 1))
+
+
+def draw_trace_playback():
+  if not draw_trace_data:
+    logger.warning("Draw requested but trace data is empty. Run Trace first.")
+    return
+
+  _draw_trace_shaded_base()
+  _set_draw_progress_value(0)
+
+  _trace_draw_step(0)
+
+
 
 
 def save_image():
@@ -15591,13 +16156,34 @@ sketchBut.grid(row=0, column=2, padx=4, pady=4)
 clearBut = Button(imagesToolbar, text="Clear Canvas", width=16, command=clear_canvas)
 clearBut.grid(row=0, column=3, padx=4, pady=4)
 
+traceBut = Button(imagesToolbar, text="Trace", width=16, command=trace)
+traceBut.grid(row=0, column=4, padx=4, pady=4)
+
+drawTraceBut = Button(imagesToolbar, text="Draw", width=16, command=draw_trace_playback)
+drawTraceBut.grid(row=0, column=5, padx=4, pady=4)
+
+stopDrawBut = Button(imagesToolbar, text="Stop Draw", width=16, command=_stop_trace_playback)
+stopDrawBut.grid(row=0, column=6, padx=4, pady=4)
+
+drawProgressScale = Scale(
+  tab7draw,
+  from_=0,
+  to=0,
+  orient=HORIZONTAL,
+  length=DRAW_CANVAS_WIDTH,
+  command=on_draw_progress_change
+)
+drawProgressScale.place(x=20, y=60, height=22)
+draw_progress_scale = drawProgressScale
+_update_draw_progress_limits(reset=True)
+
 drawSurface = tk.Frame(
   tab7draw,
   bg=DRAW_CANVAS_BG,
   bd=0,
   highlightthickness=0
 )
-drawSurface.place(x=20, y=60, width=DRAW_CANVAS_WIDTH, height=DRAW_CANVAS_HEIGHT)
+drawSurface.place(x=20, y=90, width=DRAW_CANVAS_WIDTH, height=DRAW_CANVAS_HEIGHT)
 
 drawCanvas = tk.Canvas(
   drawSurface,
@@ -15610,7 +16196,7 @@ drawCanvas = tk.Canvas(
 )
 
 drawToolbar = Frame(tab7draw)
-drawToolbar.place(x=1240, y=60)
+drawToolbar.place(x=1240, y=90)
 
 rotLeftDrawBut = Button(drawToolbar, text="↺ Rotate 90 Left", width=16, command=rotate_draw_left)
 rotLeftDrawBut.grid(row=0, column=0, padx=4, pady=4)
