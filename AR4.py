@@ -158,7 +158,7 @@ import tkinter as tk
 from tkinter import ttk, Misc
 from tkinter import filedialog as fd
 import tkinter.messagebox
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw, ImageOps
 
 # Use ttk container widgets so options like `padding` work consistently.
 Frame = ttk.Frame
@@ -15385,6 +15385,7 @@ draw_last_point = [None, None]
 draw_bg_image_tk = None
 draw_bg_image_item = None
 draw_bg_image_path = None
+draw_bg_image_pil = None
 
 
 def redraw_draw_canvas():
@@ -15427,18 +15428,72 @@ def stop_draw_stroke(_event):
   draw_last_point[0] = None
   draw_last_point[1] = None
 
-def clear_draw_canvas():
-  global draw_bg_image_tk, draw_bg_image_item, draw_bg_image_path
+def clear_canvas():
+  global draw_bg_image_tk, draw_bg_image_item, draw_bg_image_path, draw_bg_image_pil
 
   draw_segments.clear()
   draw_bg_image_tk = None
   draw_bg_image_item = None
   draw_bg_image_path = None
+  draw_bg_image_pil = None
   drawCanvas.delete("all")
 
 
-def open_draw_file():
-  global draw_bg_image_tk, draw_bg_image_item, draw_bg_image_path
+def save_image():
+  file_path = fd.asksaveasfilename(
+    title="Save image",
+    defaultextension=".png",
+    filetypes=[
+      ("PNG image", "*.png"),
+      ("JPEG image", "*.jpg;*.jpeg"),
+      ("BMP image", "*.bmp"),
+      ("All files", "*.*")
+    ]
+  )
+  if not file_path:
+    return
+
+  try:
+    export_img = Image.new("RGB", (DRAW_CANVAS_WIDTH, DRAW_CANVAS_HEIGHT), DRAW_CANVAS_BG)
+
+    if draw_bg_image_pil is not None:
+      bg_img = draw_bg_image_pil
+      bg_w, bg_h = bg_img.size
+      if bg_w > 0 and bg_h > 0:
+        off_x = int((DRAW_CANVAS_WIDTH - bg_w) / 2)
+        off_y = int((DRAW_CANVAS_HEIGHT - bg_h) / 2)
+        export_img.paste(bg_img, (off_x, off_y))
+
+    draw = ImageDraw.Draw(export_img)
+    for x1, y1, x2, y2 in draw_segments:
+      draw.line((x1, y1, x2, y2), fill="black", width=2)
+
+    export_img.save(file_path)
+  except Exception as e:
+    logger.error(f"Failed to save drawing image: {e}")
+
+
+def sketch():
+  global draw_bg_image_pil, draw_bg_image_tk, draw_bg_image_path
+
+  if draw_bg_image_pil is None:
+    logger.warning("Sketch requested but no image is loaded in the canvas")
+    return
+
+  try:
+    gray = ImageOps.grayscale(draw_bg_image_pil)
+    gray = ImageOps.autocontrast(gray)
+    bw = gray.point(lambda p: 255 if p > 150 else 0, mode="1").convert("RGB")
+
+    draw_bg_image_pil = bw
+    draw_bg_image_tk = ImageTk.PhotoImage(draw_bg_image_pil)
+    draw_bg_image_path = None
+    redraw_draw_canvas()
+  except Exception as e:
+    logger.error(f"Failed to sketch drawing image: {e}")
+
+def open_file():
+  global draw_bg_image_tk, draw_bg_image_item, draw_bg_image_path, draw_bg_image_pil
 
   file_path = fd.askopenfilename(
     title="Open image file",
@@ -15460,8 +15515,9 @@ def open_draw_file():
     new_w = max(1, int(img_w * scale))
     new_h = max(1, int(img_h * scale))
 
-    image = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
-    draw_bg_image_tk = ImageTk.PhotoImage(image)
+    image = image.resize((new_w, new_h), Image.Resampling.LANCZOS).convert("RGB")
+    draw_bg_image_pil = image
+    draw_bg_image_tk = ImageTk.PhotoImage(draw_bg_image_pil)
     draw_bg_image_path = file_path
 
     redraw_draw_canvas()
@@ -15497,8 +15553,8 @@ def rotate_draw_left():
 
   rotated = []
   for x1, y1, x2, y2 in draw_segments:
-    rx1, ry1 = _rotate_point_90_left(x1, y1)
-    rx2, ry2 = _rotate_point_90_left(x2, y2)
+    rx1, ry1 = _rotate_point_90_right(x1, y1)
+    rx2, ry2 = _rotate_point_90_right(x2, y2)
     rotated.append((rx1, ry1, rx2, ry2))
 
   draw_segments.clear()
@@ -15512,19 +15568,28 @@ def rotate_draw_right():
 
   rotated = []
   for x1, y1, x2, y2 in draw_segments:
-    rx1, ry1 = _rotate_point_90_right(x1, y1)
-    rx2, ry2 = _rotate_point_90_right(x2, y2)
+    rx1, ry1 = _rotate_point_90_left(x1, y1)
+    rx2, ry2 = _rotate_point_90_left(x2, y2)
     rotated.append((rx1, ry1, rx2, ry2))
 
   draw_segments.clear()
   draw_segments.extend(rotated)
   redraw_draw_canvas()
 
-filesToolbar = Frame(tab7draw)
-filesToolbar.place(x=20, y=20)
+imagesToolbar = Frame(tab7draw)
+imagesToolbar.place(x=20, y=20)
 
-openFileBut = Button(filesToolbar, text="Open file", width=16, command=open_draw_file)
+openFileBut = Button(imagesToolbar, text="Open file", width=16, command=open_file)
 openFileBut.grid(row=0, column=0, padx=4, pady=4)
+
+saveImageBut = Button(imagesToolbar, text="Save image", width=16, command=save_image)
+saveImageBut.grid(row=0, column=1, padx=4, pady=4)
+
+sketchBut = Button(imagesToolbar, text="Sketch", width=16, command=sketch)
+sketchBut.grid(row=0, column=2, padx=4, pady=4)
+
+clearBut = Button(imagesToolbar, text="Clear Canvas", width=16, command=clear_canvas)
+clearBut.grid(row=0, column=3, padx=4, pady=4)
 
 drawSurface = tk.Frame(
   tab7draw,
@@ -15545,16 +15610,13 @@ drawCanvas = tk.Canvas(
 )
 
 drawToolbar = Frame(tab7draw)
-drawToolbar.place(x=1240, y=20)
+drawToolbar.place(x=1240, y=60)
 
-clearDrawBut = Button(drawToolbar, text="Clear Canvas", width=16, command=clear_draw_canvas)
-clearDrawBut.grid(row=0, column=0, padx=4, pady=4)
+rotLeftDrawBut = Button(drawToolbar, text="↺ Rotate 90 Left", width=16, command=rotate_draw_left)
+rotLeftDrawBut.grid(row=0, column=0, padx=4, pady=4)
 
-rotLeftDrawBut = Button(drawToolbar, text="Rotate 90 Left", width=16, command=rotate_draw_left)
-rotLeftDrawBut.grid(row=1, column=0, padx=4, pady=4)
-
-rotRightDrawBut = Button(drawToolbar, text="Rotate 90 Right", width=16, command=rotate_draw_right)
-rotRightDrawBut.grid(row=2, column=0, padx=4, pady=4)
+rotRightDrawBut = Button(drawToolbar, text="↻ Rotate 90 Right", width=16, command=rotate_draw_right)
+rotRightDrawBut.grid(row=1, column=0, padx=4, pady=4)
 
 drawCanvas.pack(fill="both", expand=True)
 apply_draw_canvas_colors()
@@ -15562,9 +15624,6 @@ apply_draw_canvas_colors()
 drawCanvas.bind("<ButtonPress-1>", start_draw_stroke)
 drawCanvas.bind("<B1-Motion>", draw_with_mouse)
 drawCanvas.bind("<ButtonRelease-1>", stop_draw_stroke)
-
-
-
 
 
 ####################################################################################################################################################
