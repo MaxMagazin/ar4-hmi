@@ -280,11 +280,17 @@ nb.add(tab6, text='   Vision    ')
 tab7 = ttk_bootstrap.Frame(nb)
 nb.add(tab7, text='    G-Code     ')
 
+tab7draw = ttk_bootstrap.Frame(nb)
+nb.add(tab7draw, text='    Draw     ')
+
 tab8 = ttk_bootstrap.Frame(nb)
 nb.add(tab8, text='      Log      ')
 
 tab9 = ttk_bootstrap.Frame(nb)
-#nb.add(tab9, text='   Info    ')
+nb.add(tab9, text='   Info    ')
+
+#open the Draw tab by default
+nb.select(tab7draw)
 
 def on_closing():
   cv2.destroyAllWindows()
@@ -2205,6 +2211,8 @@ def darkTheme():
   style.configure("TMenubutton", 
                   padding=(5, 3, 5, 3))     # Match button padding for proportional scaling
 
+  apply_draw_canvas_colors()
+
 
 def lightTheme():
   CAL['curTheme'] = 1
@@ -2241,6 +2249,8 @@ def lightTheme():
   # Configure OptionMenu widgets to match button proportions
   style.configure("TMenubutton", 
                   padding=(5, 3, 5, 3))     # Match button padding for proportional scaling
+
+  apply_draw_canvas_colors()
 
 
 
@@ -15349,15 +15359,6 @@ saveGCBut = Button(tab7,  text="SAVE DATA",  width=26, command = SaveAndApplyCal
 saveGCBut.place(x=20, y=600)
 
 
-
-
-
-
-
-
-
-
-
 gcodeCurRowLab = Label(tab7, text = "Current Row: ")
 gcodeCurRowLab.place(x=1100, y=21)
 
@@ -15368,6 +15369,199 @@ gcodeFilenameLab = Label(tab7, text = "Filename:")
 gcodeFilenameLab.place(x=20, y=320)
 
 
+####################################################################################################################################################
+####################################################################################################################################################
+####################################################################################################################################################
+####TAB Drawing
+
+DRAW_CANVAS_WIDTH = 1200
+DRAW_CANVAS_HEIGHT = 700
+DRAW_CANVAS_CENTER_X = DRAW_CANVAS_WIDTH / 2
+DRAW_CANVAS_CENTER_Y = DRAW_CANVAS_HEIGHT / 2
+DRAW_CANVAS_BG = "#b8b8b8"
+
+draw_segments = []
+draw_last_point = [None, None]
+draw_bg_image_tk = None
+draw_bg_image_item = None
+draw_bg_image_path = None
+
+
+def redraw_draw_canvas():
+  global draw_bg_image_item
+
+  drawCanvas.delete("all")
+  if draw_bg_image_tk is not None:
+    draw_bg_image_item = drawCanvas.create_image(
+      DRAW_CANVAS_CENTER_X,
+      DRAW_CANVAS_CENTER_Y,
+      image=draw_bg_image_tk,
+      anchor="center"
+    )
+
+  for x1, y1, x2, y2 in draw_segments:
+    drawCanvas.create_line(x1, y1, x2, y2, width=2, fill="black", capstyle=ROUND, smooth=True)
+
+
+def start_draw_stroke(event):
+  draw_last_point[0] = event.x
+  draw_last_point[1] = event.y
+
+
+def draw_with_mouse(event):
+  if draw_last_point[0] is None or draw_last_point[1] is None:
+    draw_last_point[0] = event.x
+    draw_last_point[1] = event.y
+    return
+
+  x1 = draw_last_point[0]
+  y1 = draw_last_point[1]
+  x2 = event.x
+  y2 = event.y
+  draw_segments.append((x1, y1, x2, y2))
+  drawCanvas.create_line(x1, y1, x2, y2, width=2, fill="black", capstyle=ROUND, smooth=True)
+  draw_last_point[0] = x2
+  draw_last_point[1] = y2
+
+def stop_draw_stroke(_event):
+  draw_last_point[0] = None
+  draw_last_point[1] = None
+
+def clear_draw_canvas():
+  global draw_bg_image_tk, draw_bg_image_item, draw_bg_image_path
+
+  draw_segments.clear()
+  draw_bg_image_tk = None
+  draw_bg_image_item = None
+  draw_bg_image_path = None
+  drawCanvas.delete("all")
+
+
+def open_draw_file():
+  global draw_bg_image_tk, draw_bg_image_item, draw_bg_image_path
+
+  file_path = fd.askopenfilename(
+    title="Open image file",
+    filetypes=[
+      ("Image files", "*.png *.jpg *.jpeg *.bmp *.gif *.webp"),
+      ("All files", "*.*")
+    ]
+  )
+  if not file_path:
+    return
+
+  try:
+    image = Image.open(file_path)
+    img_w, img_h = image.size
+    if img_w <= 0 or img_h <= 0:
+      return
+
+    scale = min(DRAW_CANVAS_WIDTH / img_w, DRAW_CANVAS_HEIGHT / img_h)
+    new_w = max(1, int(img_w * scale))
+    new_h = max(1, int(img_h * scale))
+
+    image = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    draw_bg_image_tk = ImageTk.PhotoImage(image)
+    draw_bg_image_path = file_path
+
+    redraw_draw_canvas()
+  except Exception as e:
+    logger.error(f"Failed to open drawing image file: {e}")
+
+def apply_draw_canvas_colors():
+  try:
+    drawSurface.configure(bg=DRAW_CANVAS_BG)
+    drawCanvas.configure(
+      bg=DRAW_CANVAS_BG,
+      highlightbackground=DRAW_CANVAS_BG,
+      highlightcolor=DRAW_CANVAS_BG
+    )
+  except Exception:
+    pass
+
+def _rotate_point_90_left(x, y):
+  dx = x - DRAW_CANVAS_CENTER_X
+  dy = y - DRAW_CANVAS_CENTER_Y
+  return DRAW_CANVAS_CENTER_X - dy, DRAW_CANVAS_CENTER_Y + dx
+
+
+def _rotate_point_90_right(x, y):
+  dx = x - DRAW_CANVAS_CENTER_X
+  dy = y - DRAW_CANVAS_CENTER_Y
+  return DRAW_CANVAS_CENTER_X + dy, DRAW_CANVAS_CENTER_Y - dx
+
+
+def rotate_draw_left():
+  if not draw_segments:
+    return
+
+  rotated = []
+  for x1, y1, x2, y2 in draw_segments:
+    rx1, ry1 = _rotate_point_90_left(x1, y1)
+    rx2, ry2 = _rotate_point_90_left(x2, y2)
+    rotated.append((rx1, ry1, rx2, ry2))
+
+  draw_segments.clear()
+  draw_segments.extend(rotated)
+  redraw_draw_canvas()
+
+
+def rotate_draw_right():
+  if not draw_segments:
+    return
+
+  rotated = []
+  for x1, y1, x2, y2 in draw_segments:
+    rx1, ry1 = _rotate_point_90_right(x1, y1)
+    rx2, ry2 = _rotate_point_90_right(x2, y2)
+    rotated.append((rx1, ry1, rx2, ry2))
+
+  draw_segments.clear()
+  draw_segments.extend(rotated)
+  redraw_draw_canvas()
+
+filesToolbar = Frame(tab7draw)
+filesToolbar.place(x=20, y=20)
+
+openFileBut = Button(filesToolbar, text="Open file", width=16, command=open_draw_file)
+openFileBut.grid(row=0, column=0, padx=4, pady=4)
+
+drawSurface = tk.Frame(
+  tab7draw,
+  bg=DRAW_CANVAS_BG,
+  bd=0,
+  highlightthickness=0
+)
+drawSurface.place(x=20, y=60, width=DRAW_CANVAS_WIDTH, height=DRAW_CANVAS_HEIGHT)
+
+drawCanvas = tk.Canvas(
+  drawSurface,
+  width=DRAW_CANVAS_WIDTH,
+  height=DRAW_CANVAS_HEIGHT,
+  bg=DRAW_CANVAS_BG,
+  bd=0,
+  highlightthickness=0,
+  relief="flat"
+)
+
+drawToolbar = Frame(tab7draw)
+drawToolbar.place(x=1240, y=20)
+
+clearDrawBut = Button(drawToolbar, text="Clear Canvas", width=16, command=clear_draw_canvas)
+clearDrawBut.grid(row=0, column=0, padx=4, pady=4)
+
+rotLeftDrawBut = Button(drawToolbar, text="Rotate 90 Left", width=16, command=rotate_draw_left)
+rotLeftDrawBut.grid(row=1, column=0, padx=4, pady=4)
+
+rotRightDrawBut = Button(drawToolbar, text="Rotate 90 Right", width=16, command=rotate_draw_right)
+rotRightDrawBut.grid(row=2, column=0, padx=4, pady=4)
+
+drawCanvas.pack(fill="both", expand=True)
+apply_draw_canvas_colors()
+
+drawCanvas.bind("<ButtonPress-1>", start_draw_stroke)
+drawCanvas.bind("<B1-Motion>", draw_with_mouse)
+drawCanvas.bind("<ButtonRelease-1>", stop_draw_stroke)
 
 
 
